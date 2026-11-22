@@ -3,7 +3,6 @@ package com.gathin.tvhome;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 /** The numbers of HOME-DESIGN.md section 21.10. */
@@ -91,14 +90,5 @@ public class TopBarLayoutTest {
         assertEquals("classic", TopBarLayout.mode("split", false, false, true));
         assertEquals("classic", TopBarLayout.mode("nonsense", false, false, false));
         assertEquals("tvos", TopBarLayout.mode("tvos", false, false, false));
-    }
-
-    @Test public void stableNeedsTwoEqualPassesOrTheTimeout() {
-        int[] a = {100, 40, 200, 90, 30, 180}, b = {100, 40, 220, 90, 30, 200};
-        assertFalse("first pass", TopBarLayout.stable(null, a, 10));
-        assertFalse("widths moved", TopBarLayout.stable(a, b, 10));
-        assertTrue("same twice", TopBarLayout.stable(a, a.clone(), 10));
-        assertTrue("timeout", TopBarLayout.stable(null, a, TopBarLayout.SETTLE_TIMEOUT_MS));
-        assertTrue("timeout while moving", TopBarLayout.stable(a, b, 900));
     }
 }

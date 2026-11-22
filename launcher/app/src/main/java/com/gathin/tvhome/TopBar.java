@@ -43,10 +43,7 @@ final class TopBar {
     private final int screenW;
     private final Rect rc = new Rect(), ra = new Rect(), rd = new Rect(), rg = new Rect(), rh = new Rect();
 
-    private boolean styled, probed, revealed;
-    private long hiddenAt;
-    private int[] prevW, curW = new int[6], spare = new int[6];
-    private final Runnable settle = new Runnable() { @Override public void run() { if (!revealed) place(); } };
+    private boolean styled, probed;
     private float scaleX = 1f;
 
     private TopBar(Activity a, Config cfg, float density, String mode) {
@@ -74,41 +71,11 @@ final class TopBar {
         bar.header.getViewTreeObserver().addOnPreDrawListener(new ViewTreeObserver.OnPreDrawListener() {
             @Override public boolean onPreDraw() {
                 bar.header.getViewTreeObserver().removeOnPreDrawListener(this);
-                bar.hide();
                 bar.style();
                 return false;   // the restyle asked for another layout; draw only after it
             }
         });
         return bar;
-    }
-
-    // ---- reveal guard: the bar is not drawn until place() has run on stable widths ----
-
-    private void hide() {
-        hiddenAt = android.os.SystemClock.uptimeMillis();
-        leftBlock.setAlpha(0f);
-        buttons.setAlpha(0f);
-        header.postDelayed(settle, TopBarLayout.SETTLE_TIMEOUT_MS);   // never stays hidden if fonts do not settle
-    }
-
-    private void checkReveal() {
-        int[] w = spare;
-        w[0] = clock.getWidth(); w[1] = ampm.getWidth(); w[2] = date.getWidth();
-        w[3] = rc.width(); w[4] = ra.width(); w[5] = rd.width();
-        long elapsed = android.os.SystemClock.uptimeMillis() - hiddenAt;
-        boolean ok = TopBarLayout.stable(prevW, w, elapsed);
-        spare = prevW != null ? prevW : new int[6];
-        prevW = w;
-        if (!ok) { header.postOnAnimation(settle); return; }   // measure again next frame
-        revealed = true;
-        header.removeCallbacks(settle);
-        if (Glass.animations() && !Glass.reducedMotion()) {
-            leftBlock.animate().alpha(1f).setDuration(TopBarLayout.REVEAL_MS).start();
-            buttons.animate().alpha(1f).setDuration(TopBarLayout.REVEAL_MS).start();
-        } else {
-            leftBlock.setAlpha(1f);
-            buttons.setAlpha(1f);
-        }
     }
 
     // ---- once: styles and sizes, after the classic layout has been measured ----
@@ -163,13 +130,6 @@ final class TopBar {
         View.OnLayoutChangeListener again = (v, l, t, r, b, ol, ot, or, ob) -> place();
         header.addOnLayoutChangeListener(again);
         for (View v : new View[]{clock, ampm, date, greeting, buttons}) v.addOnLayoutChangeListener(again);
-        // A minute tick, a date change or a font switch changes the ink width even when the view's bounds do not move.
-        android.text.TextWatcher watch = new android.text.TextWatcher() {
-            @Override public void beforeTextChanged(CharSequence s, int a, int b, int c) {}
-            @Override public void onTextChanged(CharSequence s, int a, int b, int c) {}
-            @Override public void afterTextChanged(android.text.Editable e) { place(); }
-        };
-        for (TextView v : new TextView[]{clock, ampm, date}) v.addTextChangedListener(watch);
     }
 
     private void caption(TextView v, float sp) {
@@ -293,7 +253,6 @@ final class TopBar {
             fitScrim(row.end, base, greetingBase);
         }
         setTranslation(buttons, right - (layoutX(buttons) + buttons.getWidth()), centre - (layoutY(buttons) + buttons.getHeight() / 2f));
-        if (!revealed) checkReveal();
     }
 
     /** split: the corner scrim is stretched until the date and the greeting end inside its 4.5:1 zone (21.6). */
