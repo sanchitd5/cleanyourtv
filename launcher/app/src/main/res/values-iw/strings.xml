@@ -152,4 +152,17 @@
     <string name="clock_format_system">מערכת</string>
     <string name="clock_format_12">12 שעות</string>
     <string name="clock_format_24">24 שעות</string>
+    <string name="dock_tiles_label">אריחי המעגן</string>
+    <string name="dock_tiles_state">אריחי המעגן: %1$s</string>
+    <string name="home_calm_label">הרגעת הבית אחרי</string>
+    <string name="home_calm_state">הרגעת הבית אחרי: %1$s</string>
+    <string name="home_dim_label">עמעום הבית אחרי</string>
+    <string name="home_dim_state">עמעום הבית אחרי: %1$s</string>
+    <string name="clock_dim_label">עמעום השעון אחרי</string>
+    <string name="clock_dim_state">עמעום השעון אחרי: %1$s</string>
+    <string name="clock_blank_label">כיבוי השעון אחרי</string>
+    <string name="clock_blank_state">כיבוי השעון אחרי: %1$s</string>
+    <string name="timing_seconds">%1$d שנ׳</string>
+    <string name="timing_minutes">%1$d דק׳</string>
+    <string name="follow_theme_row">לפי ערכת הנושא</string>
 </resources>

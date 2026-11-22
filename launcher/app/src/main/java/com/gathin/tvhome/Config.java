@@ -367,6 +367,11 @@ final class Config {
                 .remove(CLOCK_DIM_AFTER_KEY).remove(CLOCK_BLANK_AFTER_KEY);
     }
 
+    /** Forgets one Horizon choice (a row's own "Follow theme"). Does not commit. */
+    static SharedPreferences.Editor clearHorizonChoice(SharedPreferences.Editor editor, String key) {
+        return editor.remove(key);
+    }
+
     private Config(List<String> dockApps, boolean fillDock, List<String> hiddenApps, List<String> libraryApps, List<String> libraryExcludedApps, String liveTvPackage,
                    String liveTvAction, String liveTvInputId, Map<String, String> launchActions, Map<String, String> appLabels,
                    Map<String, String> appBanners, String sourcePanelService, String sourcePanelAction,

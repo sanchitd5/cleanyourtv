@@ -78,6 +78,11 @@ final class StillGuard {
         return 1f - (1f - floor) * t * t * (3f - 2f * t);
     }
 
+    /** The picture's alpha for a dim factor f: it reaches 50 % when f reaches the floor; with a floor of 1 nothing dims. */
+    static float pictureAlpha(float f, float floor) {
+        return floor >= 1f ? 1f : 1f - 0.5f * (1f - f) / (1f - floor);
+    }
+
     /** True once the screensaver has run afterMs; afterMs <= 0 never blanks. */
     static boolean blank(long elapsedMs, long afterMs) {
         return afterMs > 0 && elapsedMs >= afterMs;

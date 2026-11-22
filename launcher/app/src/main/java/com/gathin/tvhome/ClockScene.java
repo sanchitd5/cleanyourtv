@@ -1,6 +1,7 @@
 package com.gathin.tvhome;
 
 import android.animation.ArgbEvaluator;
+import android.animation.ObjectAnimator;
 import android.content.Context;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
@@ -11,6 +12,7 @@ import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.LayerDrawable;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.util.DisplayMetrics;
 import android.view.Gravity;
 import android.view.View;
@@ -20,6 +22,7 @@ import android.widget.TextView;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -33,7 +36,10 @@ import java.util.Set;
  */
 final class ClockScene {
 
-    private static final long MOVE_MS = 60_000L;
+    /** The pause between moves (theme clock_shift_seconds; 60 s unless a theme says otherwise). */
+    private long moveMs = 60_000L;
+    /** Stillness guard (HOME-DESIGN.md section 7.6): how often dim and blank are checked, and how fast they happen. */
+    private static final long GUARD_CHECK_MS = 15_000L, DIM_RAMP_MS = 600_000L, FADE_MS = 4000L;
     /** The glow's colour change: 16 steps over 8 s. Animated per frame it redrew the full-screen gradient ~480 times. */
     private static final int GLOW_STEPS = 16;
     private static final long GLOW_STEP_MS = 500L;
@@ -69,6 +75,21 @@ final class ClockScene {
     private boolean aerial;
     private Map<String, String> names;
     private TextView caption;
+    /** Which still the caption belongs to: it alternates sides with each one (StillGuard.captionAtStart). */
+    private int pictureIndex;
+    /** Seconds the caption stays (wallpaper_caption_seconds); 0 keeps it until the next move, as before. */
+    private int captionSeconds;
+    /** screensaver_wallpapers: the stills are credited from their own captions.txt, with or without clock_aerial. */
+    private boolean stills;
+    /** The guard: a seed and step for the clock's spots, when the scene began, the dim and blank settings, and where it stands. */
+    private long seed;
+    private int step;
+    private long startedAt = -1;
+    private long dimAfterMs, blankAfterMs;
+    private float dimFloor = 0.35f;
+    private float contentAlpha = 1f;
+    private boolean blanked;
+    private ObjectAnimator dimAnim;
 
     private final Runnable tick = new Runnable() {
         @Override
@@ -78,7 +99,21 @@ final class ClockScene {
             if (aerial && wallpaperShown) drift();
             if (caption != null) caption.animate().alpha(0f).setDuration(1200).start();
             advanceWallpaper();
-            handler.postDelayed(this, MOVE_MS);
+            handler.postDelayed(this, moveMs);
+        }
+    };
+
+    /** Every GUARD_CHECK_MS: blank once its time is up, otherwise dim by the curve. */
+    private final Runnable guard = new Runnable() {
+        @Override
+        public void run() {
+            long elapsed = SystemClock.elapsedRealtime() - startedAt;
+            if (StillGuard.blank(elapsed, blankAfterMs)) {
+                blank();
+                return;
+            }
+            applyDim(StillGuard.dim(elapsed, dimAfterMs, DIM_RAMP_MS, dimFloor));
+            handler.postDelayed(this, GUARD_CHECK_MS);
         }
     };
 
@@ -97,13 +132,20 @@ final class ClockScene {
     }
 
     void start() {
+        if (blanked) return;   // blank ended the work; a resume must not restart it
+        if (startedAt < 0) startedAt = SystemClock.elapsedRealtime();
+        seed = random.nextLong();
+        step = 0;
         content.setAlpha(0f);
         content.post(() -> {
+            if (blanked) return;
             placeClock();
-            content.animate().alpha(1f).setDuration(1200).start();
+            content.animate().alpha(contentAlpha).setDuration(1200).start();
         });
         handler.removeCallbacks(tick);
-        handler.postDelayed(tick, MOVE_MS);
+        handler.postDelayed(tick, moveMs);
+        handler.removeCallbacks(guard);
+        if (dimAfterMs > 0 || blankAfterMs > 0) handler.postDelayed(guard, GUARD_CHECK_MS);
         clockRefresh.start();
         if (wallpaperFile != null && !wallpaperShown) loadWallpaper();
     }
@@ -113,6 +155,7 @@ final class ClockScene {
         clockRefresh.stop();
         content.animate().cancel();
         if (aerial) ambient.animate().cancel();
+        if (dimAnim != null) dimAnim.cancel();
         wallpaperGeneration++;   // a decode still running must not attach its picture to a stopped scene
     }
 
@@ -133,6 +176,29 @@ final class ClockScene {
         // clock_glow false: plain black behind the clock (OLED); the clock itself still moves every minute.
         glowOff = !cfg.clockGlow;
         if (glowOff) ambient.setBackground(null);
+        // The guard: spacing of the moves, and the dim and blank times (0 is off; a choice made on the TV is in cfg).
+        moveMs = cfg.clockShiftSeconds * 1000L;
+        dimAfterMs = cfg.clockDimAfterMinutes * 60_000L;
+        blankAfterMs = cfg.clockBlankAfterMinutes * 60_000L;
+        dimFloor = cfg.clockDimFloor / 100f;
+        captionSeconds = cfg.wallpaperCaptionSeconds;
+        // screensaver_wallpapers: the theme's own stills and their credits instead of Home's wallpapers.
+        List<File> own = ScreensaverStills.load(ctx);
+        if (!own.isEmpty()) {
+            rotation = new ArrayList<>(own);
+            wallpaperFile = rotation.get(random.nextInt(rotation.size()));   // not always the same first picture
+            rotationMs = (cfg.wallpaperRotationMinutes > 0 ? cfg.wallpaperRotationMinutes : 15) * 60_000L;
+            order = cfg.wallpaperOrder;
+            moods = Collections.emptyMap();
+            latitude = "";
+            longitude = "";
+            aerial = cfg.clockAerial;
+            stills = true;
+            names = WallpaperCaptions.read(wallpaperFile.getParentFile());
+            wallpaperShade = (cfg.clockWallpaperDim * 255 / 100) << 24;
+            wallpaperRes = ctx.getResources();
+            return;
+        }
         if (!cfg.clockWallpaper) return;
         // What Home plays, and Config puts the single wallpaper in it when a theme has no collection.
         // Reading cfg.wallpaper first held the screensaver on wallpaper.jpg while Home rotated.
@@ -181,10 +247,8 @@ final class ClockScene {
                 ambient.setBackground(null);
                 ambient.setImageDrawable(new LayerDrawable(new Drawable[]{
                         new BitmapDrawable(res, bmp), new ColorDrawable(shade)}));
-                if (aerial) {
-                    drift();
-                    nameWallpaper(file);
-                }
+                if (aerial) drift();
+                if (aerial || stills) nameWallpaper(file);
             });
         }, "clock-wallpaper").start();
     }
@@ -193,7 +257,7 @@ final class ClockScene {
     private void drift() {
         float[] to = pan(random.nextFloat(), random.nextFloat(), random.nextFloat());
         ambient.animate().scaleX(to[0]).scaleY(to[0]).translationX(to[1] * ambient.getWidth())
-                .translationY(to[2] * ambient.getHeight()).setDuration(MOVE_MS).start();
+                .translationY(to[2] * ambient.getHeight()).setDuration(moveMs).start();
     }
 
     /**
@@ -208,28 +272,40 @@ final class ClockScene {
     }
 
     /**
-     * clock_aerial: the picture's name fades in at the bottom left, in Home's caption style; the next tick fades
-     * it out again. A picture without a line in captions.txt shows none.
+     * clock_aerial or screensaver_wallpapers: the picture's name fades in at the bottom, in Home's caption style,
+     * on alternating sides picture by picture; the next tick (or wallpaper_caption_seconds) fades it out again.
+     * A picture without a line in captions.txt shows none.
      */
     private void nameWallpaper(File file) {
         String name = names.get(file.getName());
-        if (name == null) return;
+        if (name == null || blanked) return;
         if (caption == null) {
             caption = WallpaperPlayer.makeCaption(ambient.getContext(), (FrameLayout) ambient.getParent());
-            FrameLayout.LayoutParams corner = (FrameLayout.LayoutParams) caption.getLayoutParams();
-            corner.gravity = Gravity.BOTTOM;
-            corner.bottomMargin = corner.getMarginEnd();   // as far from the corner as Home's is from the edge
-            corner.setMarginStart(corner.bottomMargin);
         }
+        FrameLayout.LayoutParams corner = (FrameLayout.LayoutParams) caption.getLayoutParams();
+        int edge = corner.getMarginEnd();   // as far from the corner as Home's is from the edge
+        corner.gravity = Gravity.BOTTOM | (StillGuard.captionAtStart(pictureIndex++) ? Gravity.START : Gravity.END);
+        corner.topMargin = 0;
+        corner.bottomMargin = edge;
+        corner.setMarginStart(edge);
+        corner.setMarginEnd(edge);
+        caption.setLayoutParams(corner);
         caption.setText(name);
+        caption.animate().cancel();
         caption.setAlpha(0f);
         caption.animate().alpha(1f).setDuration(1200).start();
+        handler.removeCallbacks(hideCaption);
+        if (captionSeconds > 0) handler.postDelayed(hideCaption, captionSeconds * 1000L);
     }
+
+    private final Runnable hideCaption = () -> {
+        if (caption != null) caption.animate().alpha(0f).setDuration(1200).start();
+    };
 
     /** Step to the next picture once its turn is up; the tick already runs every minute. */
     private void advanceWallpaper() {
         if (rotation == null || rotationMs <= 0 || rotation.size() < 2) return;
-        shownMs += MOVE_MS;
+        shownMs += moveMs;
         if (shownMs < rotationMs) return;
         shownMs = 0;
         // The same pick as Home's, so a shuffled collection stays shuffled and wallpaper_moods still
@@ -244,8 +320,9 @@ final class ClockScene {
 
     private void moveClock() {
         content.animate().alpha(0f).setDuration(900).withLayer().withEndAction(() -> {
+            if (blanked) return;
             placeClock();
-            content.animate().alpha(1f).setDuration(1200).withLayer().start();
+            content.animate().alpha(contentAlpha).setDuration(1200).withLayer().start();
         }).start();
     }
 
@@ -254,14 +331,47 @@ final class ClockScene {
         View parent = (View) content.getParent();
         int maxX = Math.max(0, parent.getWidth() - content.getWidth());
         int maxY = Math.max(0, parent.getHeight() - content.getHeight());
-        float x = maxX * (0.1f + 0.8f * random.nextFloat());
-        float y = maxY * (0.1f + 0.8f * random.nextFloat());
+        float[] at = StillGuard.spot(step++, seed);   // a shuffled 4x3 grid: no region holds the clock twice in a row
+        float x = maxX * at[0];
+        float y = maxY * at[1];
         content.setX(x);
         content.setY(y);
         if (parent.getWidth() > 0 && parent.getHeight() > 0) {
             glow.setGradientCenter((x + content.getWidth() / 2f) / parent.getWidth(),
                     (y + content.getHeight() / 2f) / parent.getHeight());
         }
+    }
+
+    /** The dim curve's factor f: the clock fades in to f from now on, and the picture slides to half-way at the floor. */
+    private void applyDim(float f) {
+        contentAlpha = f;
+        float picture = StillGuard.pictureAlpha(f, dimFloor);
+        if (Math.abs(ambient.getAlpha() - picture) < 0.005f) return;
+        if (dimAnim != null) dimAnim.cancel();
+        dimAnim = ObjectAnimator.ofFloat(ambient, View.ALPHA, ambient.getAlpha(), picture);
+        dimAnim.setDuration(FADE_MS);
+        dimAnim.start();
+    }
+
+    /** Fade everything to black, then stop all work. The window stays black; ClockActivity's keys still finish it. */
+    private void blank() {
+        blanked = true;
+        handler.removeCallbacks(tick);
+        handler.removeCallbacks(guard);
+        if (dimAnim != null) dimAnim.cancel();
+        content.animate().cancel();
+        content.animate().alpha(0f).setDuration(FADE_MS).start();
+        ambient.animate().cancel();
+        ambient.animate().alpha(0f).setDuration(FADE_MS).start();
+        if (caption != null) {
+            caption.animate().cancel();
+            caption.animate().alpha(0f).setDuration(FADE_MS).start();
+        }
+        handler.postDelayed(() -> {
+            handler.removeCallbacksAndMessages(null);
+            clockRefresh.stop();
+            wallpaperGeneration++;
+        }, FADE_MS);
     }
 
     private void shiftGlow() {

@@ -158,4 +158,17 @@
     <string name="clock_format_system">System</string>
     <string name="clock_format_12">12-hour</string>
     <string name="clock_format_24">24-hour</string>
+    <string name="dock_tiles_label">Dock tiles</string>
+    <string name="dock_tiles_state">Dock tiles: %1$s</string>
+    <string name="home_calm_label">Home calm after</string>
+    <string name="home_calm_state">Home calm after: %1$s</string>
+    <string name="home_dim_label">Home dim after</string>
+    <string name="home_dim_state">Home dim after: %1$s</string>
+    <string name="clock_dim_label">Clock dim after</string>
+    <string name="clock_dim_state">Clock dim after: %1$s</string>
+    <string name="clock_blank_label">Clock blank after</string>
+    <string name="clock_blank_state">Clock blank after: %1$s</string>
+    <string name="timing_seconds">%1$d s</string>
+    <string name="timing_minutes">%1$d min</string>
+    <string name="follow_theme_row">Follow theme</string>
 </resources>

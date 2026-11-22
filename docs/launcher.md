@@ -63,8 +63,12 @@ The launcher's own page has these rows, top to bottom:
   transitions; they may use more memory) once animations are on.
 - **Open on start**, only with `open_on_start_choice`: Off, or an app that opens instead of Home the first
   time Home comes up after the TV starts. Once per boot, so Home and Back still reach the launcher.
-- **Follow theme (reset on-TV choices)**, which clears every choice above. Pushing or resetting a theme
-  clears them too.
+- **Dock tiles** (5 or 6), **Home calm after**, **Home dim after**, **Clock dim after** and **Clock blank
+  after** (the clock screensaver fades to black; its list has an Off choice). Each opens a list with its
+  values and a **Follow theme** button that forgets just that row. These five survive a theme push, unlike
+  the rows above, and take effect when Home comes back.
+- **Follow theme (reset on-TV choices)**, which clears every choice above, including those five. Pushing or
+  resetting a theme clears the choices above, but not the five.
 - **Choose default home** opens Android's home picker, and **TV system settings** the TV's own settings
   page.
 

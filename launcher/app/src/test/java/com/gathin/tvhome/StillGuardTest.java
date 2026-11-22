@@ -123,6 +123,29 @@ public class StillGuardTest {
         assertEquals(10, StillGuard.orbitStep(660_000L));
     }
 
+    /** What ClockScene's guard runnable does every 15 s: blank once due, otherwise dim. */
+    @Test public void theGuardScheduleDimsThenBlanksOnTime() {
+        long after = 5 * 60_000L, blankAt = 30 * 60_000L, step = 15_000L;
+        float last = 1f;
+        long blankedAt = -1;
+        for (long t = 0; t <= 40 * 60_000L && blankedAt < 0; t += step) {
+            if (StillGuard.blank(t, blankAt)) { blankedAt = t; break; }
+            float f = StillGuard.dim(t, after, 600_000L, 0.35f);
+            assertTrue(f <= last + 1e-6f);
+            if (t < after) assertEquals(1f, f, 0f);
+            last = f;
+        }
+        assertEquals(blankAt, blankedAt);
+        assertEquals(0.35f, last, 1e-3f);   // the ramp (5 to 15 min) is done long before 30 min
+    }
+
+    @Test public void thePictureReachesHalfAtTheFloorAndOnlyDimsWithTheClock() {
+        assertEquals(1f, StillGuard.pictureAlpha(1f, 0.35f), 1e-6f);
+        assertEquals(0.5f, StillGuard.pictureAlpha(0.35f, 0.35f), 1e-6f);
+        assertEquals(1f, StillGuard.pictureAlpha(1f, 1f), 0f);
+        assertEquals(1f, StillGuard.pictureAlpha(0.8f, 1f), 0f);
+    }
+
     @Test public void theCaptionAlternatesSides() {
         assertTrue(StillGuard.captionAtStart(0));
         assertFalse(StillGuard.captionAtStart(1));

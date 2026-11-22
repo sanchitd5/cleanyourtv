@@ -30,6 +30,11 @@ final class ThemeFiles {
         if (segments.size() == 2 && INPUTS.equals(segments.get(0)) && collectionImage(segments.get(1))) {
             return INPUTS + "/" + segments.get(1);
         }
+        // h-guard: screensaver_wallpapers' folder (stills and their captions.txt).
+        if (segments.size() == 2 && ScreensaverStills.FOLDER.equals(segments.get(0))
+                && (collectionImage(segments.get(1)) || WallpaperCaptions.FILE_NAME.equals(segments.get(1)))) {
+            return segments.get(0) + "/" + segments.get(1);
+        }
         return null;
     }
 
