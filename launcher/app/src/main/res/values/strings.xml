@@ -195,4 +195,10 @@
     <string name="level_medium">Medium</string>
     <string name="level_high">High</string>
     <string name="never">Never</string>
+    <string name="reduce_transparency_label">Reduce transparency</string>
+    <string name="top_bar_label">Top bar</string>
+    <string name="top_bar_classic">Classic</string>
+    <string name="top_bar_split">Split</string>
+    <string name="top_bar_tvos">tvOS</string>
+    <string name="top_bar_date_label">Show date</string>
 </resources>

@@ -11,7 +11,7 @@ final class GlassMotion {
     static final float CLOSE_SCALE_TO = 0.96f;
     static final int CLOSE_MS = 110;
     /** Settings sheet: content lift dp, spring, alpha-in and alpha-out ms. */
-    static final float SHEET_LIFT_DP = 24f, SHEET_STIFFNESS = 500f, SHEET_DAMPING = 0.9f;
+    static final float SHEET_SCALE_FROM = 0.98f, SHEET_LIFT_DP = 24f, SHEET_STIFFNESS = 500f, SHEET_DAMPING = 0.9f;
     static final int SHEET_ALPHA_MS = 160, SHEET_CLOSE_MS = 120;
     /** Backdrop cross-fade on first arrival and on a resample, and the live resample period. */
     static final int FADE_FIRST_MS = 200, FADE_RESAMPLE_MS = 300, RESAMPLE_MS = 1000;

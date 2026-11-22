@@ -189,4 +189,10 @@
     <string name="level_medium">בינונית</string>
     <string name="level_high">גבוהה</string>
     <string name="never">אף פעם</string>
+    <string name="reduce_transparency_label">הפחתת שקיפות</string>
+    <string name="top_bar_label">סרגל עליון</string>
+    <string name="top_bar_classic">קלאסי</string>
+    <string name="top_bar_split">מפוצל</string>
+    <string name="top_bar_tvos">tvOS</string>
+    <string name="top_bar_date_label">הצגת תאריך</string>
 </resources>

@@ -90,14 +90,23 @@ final class Glass {
      * the rows are added. Safe to call again.
      */
     static void rows(ViewGroup root) {
+        rows(root, R.drawable.glass_row_bg);
+    }
+
+    /** As {@link #rows} for the settings sheet and its dialogs: rows keep a chip fill at rest and show the selected choice with the ice rim (19.5). */
+    static void chips(ViewGroup root) {
+        rows(root, R.drawable.glass_chip_bg);
+    }
+
+    private static void rows(ViewGroup root, int background) {
         if (!glassOn) return;
         for (int i = 0; i < root.getChildCount(); i++) {
             View child = root.getChildAt(i);
             if (child.isFocusable() && child.isClickable()) {
-                child.setBackgroundResource(R.drawable.glass_row_bg);
+                child.setBackgroundResource(background);
                 ink(child);
             } else if (child instanceof ViewGroup) {
-                rows((ViewGroup) child);
+                rows((ViewGroup) child, background);
             }
         }
     }
