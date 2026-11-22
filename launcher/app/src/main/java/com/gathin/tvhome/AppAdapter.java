@@ -232,6 +232,10 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     /** Packages drawn from their icon and name even when they have a banner (config.xml icon_tiles). */
     private final Set<String> iconTiles;
     private final List<Entry> items = new ArrayList<>();
+    // h-group (input_group, 19.15): input tiles lead the dock; inputCount is how many, 0 when the mode is off.
+    private final boolean inputGroup;
+    private int inputCount;
+    private int lastTileWidth;
 
     AppAdapter(Context ctx, TileListener listener, int dockSize, Config cfg) {
         this.ctx = ctx;
@@ -262,6 +266,7 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         this.appLabels = cfg.appLabels;
         this.appBanners = cfg.appBanners;
         this.uniformTiles = cfg.uniformTiles;
+        this.inputGroup = cfg.inputGroupActive();
         // Tiles keep their identity across reload(), so a focused tile stays on its app instead of
         // its view being rebound to whatever app now sits in that slot.
         setHasStableIds(true);
@@ -332,21 +337,14 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         for (InputTiles.Tile tile : inputs) {
             if (tile.visible) fresh.add(inputEntry(tile));
         }
-        Collections.sort(fresh, (a, b) -> {
-            // The owner's own order first; tiles it does not know (new installs) follow by the rule below.
-            int saved = Order.compare(savedRanks, a.component.flattenToShortString(), b.component.flattenToShortString());
-            if (saved != 0) return saved;
-            int fa = favourites.indexOf(a.pkg), fb = favourites.indexOf(b.pkg);
-            if (fa >= 0 || fb >= 0) {
-                if (fa < 0) return 1;
-                if (fb < 0) return -1;
-                return Integer.compare(fa, fb);
-            }
-            // Cards come right after the configured dock apps, before the alphabetical grid.
-            boolean ca = a.kind == Entry.CARD || a.kind == Entry.INPUT, cb = b.kind == Entry.CARD || b.kind == Entry.INPUT;
-            if (ca != cb) return ca ? -1 : 1;
-            return a.label.compareToIgnoreCase(b.label);
-        });
+        if (inputGroup) {
+            // Group the first few inputs; the rest stay in the Inputs menu (owner default 7).
+            List<Entry> ins = new ArrayList<>();
+            for (Entry e : fresh) if (e.kind == Entry.INPUT) ins.add(e);
+            Collections.sort(ins, this::compareEntries);
+            for (int i = groupLimit(ins.size(), dockSize); i < ins.size(); i++) fresh.remove(ins.get(i));
+        }
+        Collections.sort(fresh, this::compareEntries);
         // Retain the optional Default-home tile until dependent tile-ordering work is merged.
         if (showHomeSettings
                 && pm.resolveActivity(new Intent(Settings.ACTION_HOME_SETTINGS), 0) != null) {
@@ -354,6 +352,9 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
                     new ComponentName(ctx, HomeSettingsActivity.class), null,
                     ctx.getDrawable(R.drawable.ic_home_settings), null, 0));
         }
+        int grouped = 0;
+        if (inputGroup) for (Entry e : fresh) if (e.kind == Entry.INPUT) grouped++;
+        inputCount = grouped;
         docked = 0;
         while (docked < fresh.size() && isDocked(fresh.get(docked))) docked++;
         emptySlots = dockRow && !reordering ? DockSlots.empty(docked, dockSize, fresh.size(), fillDock) : 0;
@@ -364,6 +365,45 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         items.clear();
         items.addAll(fresh);
         notifyDataSetChanged();
+    }
+
+    /** The dock's order: inputs first when grouped, then the owner's saved order, dock_apps, cards and inputs, then by name. */
+    private int compareEntries(Entry a, Entry b) {
+        int group = inputFirst(inputGroup, a.kind == Entry.INPUT, b.kind == Entry.INPUT);
+        if (group != 0) return group;
+        // The owner's own order first; tiles it does not know (new installs) follow by the rule below.
+        int saved = Order.compare(savedRanks, a.component.flattenToShortString(), b.component.flattenToShortString());
+        if (saved != 0) return saved;
+        int fa = favourites.indexOf(a.pkg), fb = favourites.indexOf(b.pkg);
+        if (fa >= 0 || fb >= 0) {
+            if (fa < 0) return 1;
+            if (fb < 0) return -1;
+            return Integer.compare(fa, fb);
+        }
+        // Cards come right after the configured dock apps, before the alphabetical grid.
+        boolean ca = a.kind == Entry.CARD || a.kind == Entry.INPUT, cb = b.kind == Entry.CARD || b.kind == Entry.INPUT;
+        if (ca != cb) return ca ? -1 : 1;
+        return a.label.compareToIgnoreCase(b.label);
+    }
+
+    /** input_group: an input before an app when {@code active}, else no opinion (0). */
+    static int inputFirst(boolean active, boolean aIsInput, boolean bIsInput) {
+        return active ? GridNavigation.groupOrder(aIsInput, bIsInput) : 0;
+    }
+
+    /** input_group: how many of {@code visible} inputs join the group: at most 3, and the dock keeps two app places. */
+    static int groupLimit(int visible, int dockSize) {
+        return Math.max(0, Math.min(visible, Math.min(3, dockSize - 2)));
+    }
+
+    /** Input tiles at the head of the dock, 0 when input_group is off or nothing is connected. */
+    int inputCount() {
+        return inputCount;
+    }
+
+    /** The tile width the grid laid out (px), for DockDecoration's gutter; 0 before the first tile exists. */
+    int tileWidthPx() {
+        return lastTileWidth;
     }
 
     /**
@@ -501,6 +541,7 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         int width = parent.getWidth() > 0 ? parent.getWidth() : parent.getMeasuredWidth();
         int inner = width - parent.getPaddingLeft() - parent.getPaddingRight();
         int w = tileWidthPx(inner, parent.getHeight(), dockSize, rowsBelowDock, dockTitle, dockRow, density), h = tileHeightPx(w);
+        lastTileWidth = w;
         View card = v.findViewById(R.id.card);
         ViewGroup.LayoutParams cardLp = card.getLayoutParams();
         cardLp.width = w;
@@ -697,6 +738,7 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
      * the owner moved into the dock stays there (#499); else a dock_apps entry.
      */
     private boolean isDocked(Entry e) {
+        if (inputGroup && e.kind == Entry.INPUT) return true;   // grouped inputs always count as docked
         if (savedDocked < 0) return favourites.contains(e.pkg);
         Integer rank = savedRanks.get(e.component.flattenToShortString());
         return rank != null && rank < savedDocked;
@@ -730,6 +772,7 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     /** Moves one tile; the others shift by one. Stable ids keep the moved tile's view (and its focus). */
     void move(int from, int to) {
         if (from == to || from < 0 || to < 0 || from >= movableCount() || to >= movableCount()) return;
+        if (!GridNavigation.sameGroup(from, to, inputCount)) return;   // input_group: no crossing the boundary
         items.add(to, items.remove(from));
         notifyItemMoved(from, to);
         // The dock row hides names by position: rebind the tiles whose side of the dock edge changed.
