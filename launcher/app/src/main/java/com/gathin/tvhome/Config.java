@@ -333,7 +333,7 @@ final class Config {
     final boolean glassSurfaces;
     /** With glass_surfaces and wallpaper_video, the glass shows the clip's current frame (theme glass_live_backdrop). */
     final boolean glassLiveBackdrop;
-    /** Panels are solid again; a choice made on the TV wins (see {@link #GLASS_REDUCE_TRANSPARENCY_KEY}). */
+    /** Panels are solid again; a choice made on the TV wins (see {@link #REDUCE_TRANSPARENCY_KEY}). */
     final boolean glassReduceTransparency;
     /** How the dock sets input tiles apart: {@link #INPUT_GROUP_OFF}, {@link #INPUT_GROUP_DIVIDER} or {@link #INPUT_GROUP_SEPARATE} (theme input_group). */
     final String inputGroup;
@@ -348,7 +348,7 @@ final class Config {
      * On-TV "Reduce transparency" (On / Off / Follow theme): an int in launcher_settings, 1 on, 0 off, absent -1 = the
      * theme decides. Like the Horizon choices it survives a theme push; it is in {@link #HORIZON_KEYS}, so "Follow theme" clears it.
      */
-    static final String GLASS_REDUCE_TRANSPARENCY_KEY = "glass_reduce_transparency";
+    static final String REDUCE_TRANSPARENCY_KEY = "glass_reduce_transparency";
 
     /** A known input_group (any case, trimmed), or off for anything else. */
     static String inputGroup(String value) {
@@ -411,7 +411,7 @@ final class Config {
             CLOCK_BLANK_AFTER_KEY, TOP_SHELF_KEY, TOP_SHELF_SCRIM_KEY, INPUT_TILES_KEY, INPUT_TILES_EMPTY_KEY,
             GREETING_MODE_KEY, FOCUS_PARALLAX_KEY, FOCUS_SHEEN_KEY, WALLPAPER_VIDEO_KEY, VIDEO_MINUTES_KEY,
             CAPTION_SECONDS_KEY, HOME_IDLE_SHIFT_KEY, REDUCED_MOTION_KEY, SCREENSAVER_PHOTOS_KEY,
-            GLASS_REDUCE_TRANSPARENCY_KEY};
+            REDUCE_TRANSPARENCY_KEY};
 
     /** A switch chosen on the TV: 1 is On, 0 is Off, anything else (absent is -1) leaves the theme's value. */
     static boolean chosenSwitch(int chosen, boolean theme) {
@@ -946,7 +946,7 @@ final class Config {
         homeIdleShift = chosenSwitch(choices.getInt(HOME_IDLE_SHIFT_KEY, -1), homeIdleShift);
         wallpaperCaptionSeconds = chosenTiming(choices.getInt(CAPTION_SECONDS_KEY, -1), wallpaperCaptionSeconds, 600);
         reducedMotion = chosenSwitch(choices.getInt(REDUCED_MOTION_KEY, -1), reducedMotion);
-        glassReduceTransparency = chosenSwitch(choices.getInt(GLASS_REDUCE_TRANSPARENCY_KEY, -1), glassReduceTransparency);
+        glassReduceTransparency = chosenSwitch(choices.getInt(REDUCE_TRANSPARENCY_KEY, -1), glassReduceTransparency);
         int chosenRows = choices.getInt(ROWS_BELOW_DOCK_KEY, rowsBelow);
         if (chosenRows >= 0 && chosenRows <= 3) rowsBelow = chosenRows;
         animations = choices.getBoolean("animations", animations);
