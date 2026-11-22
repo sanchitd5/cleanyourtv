@@ -46,6 +46,7 @@ final class TopBar {
     private boolean styled, probed, revealed, forced;
     private long hiddenAt;
     private int expectedCapsule;
+    private int pendingPad = -1;   // the capsule end padding posted for after the current layout pass
     private int[] prevW, spare = new int[6];
     private final int[] btnW = new int[16];
     private final Runnable settle = new Runnable() {
@@ -114,7 +115,7 @@ final class TopBar {
         // buttons itself draws the capsule fill (top_capsule_bg). Its width counts when laid out with the padding, or as its
         // content width (as measured last) plus the end padding place() applied, which is the width the next layout gives it.
         int w0 = buttons.getWidth(), pad = buttons.getPaddingRight();
-        boolean capsuleOk = !tvos || (rc.width() > 0 && pad > 0 && (w0 == expectedCapsule || w0 + pad == expectedCapsule));
+        boolean capsuleOk = !tvos || (rc.width() > 0 && pad > 0 && w0 == expectedCapsule);   // laid out with the padding
         if (elapsed >= TopBarLayout.SETTLE_TIMEOUT_MS) {
             if (!forced) {   // one more sizing pass, then show whatever it gives
                 forced = true;
@@ -305,10 +306,15 @@ final class TopBar {
             put(ampm, ra, ampmX, base);
             if (date.getVisibility() != View.GONE) put(date, rd, m, TopBarLayout.baselineY(centre, captionCap));
             int padEnd = Math.round(10 * d) + (right - clockX);
-            if (buttons.getPaddingRight() != padEnd) {
-                buttons.setPadding(0, buttons.getPaddingTop(), padEnd, buttons.getPaddingBottom());
-                buttons.requestLayout();
-                header.postOnAnimation(settle);   // lay the capsule out again even if this pass was inside a layout
+            if (buttons.getPaddingRight() != padEnd && pendingPad != padEnd) {
+                // place() often runs inside a layout pass (layout listeners), where a requestLayout() is dropped and the
+                // capsule keeps its old width. Apply the padding after this pass instead; rare (once per width change).
+                pendingPad = padEnd;
+                header.post(() -> {
+                    buttons.setPadding(0, buttons.getPaddingTop(), pendingPad, buttons.getPaddingBottom());
+                    buttons.requestLayout();
+                    header.postOnAnimation(settle);
+                });
             }
             int n = 0;
             for (int i = 0; i < buttons.getChildCount() && n < btnW.length; i++) {
