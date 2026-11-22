@@ -39,7 +39,6 @@ public final class LauncherSettingsActivity extends Activity {
     private TextView advancedChoice;
     private TextView followThemeChoice;
     private TextView openOnStartChoice;
-    private TextView dockTilesChoice, homeCalmChoice, homeDimChoice, clockDimChoice, clockBlankChoice;
     private int columns;
     private int rowsBelowDock;
     private int dockOpacity;
@@ -153,22 +152,7 @@ public final class LauncherSettingsActivity extends Activity {
             openOnStartChoice.setVisibility(View.VISIBLE);
             openOnStartChoice.setOnClickListener(v -> showOpenOnStartPicker());
         }
-        // Dock tiles and the idle timings: a dialog of choices, with "Follow theme" for that one row.
-        dockTilesChoice = findViewById(R.id.dockTilesChoice);
-        dockTilesChoice.setOnClickListener(v -> pickHorizon(Config.DOCK_TILES_KEY, R.string.dock_tiles_label,
-                Config.DOCK_TILE_CHOICES, 0));
-        homeCalmChoice = findViewById(R.id.homeCalmChoice);
-        homeCalmChoice.setOnClickListener(v -> pickHorizon(Config.HOME_IDLE_CALM_KEY, R.string.home_calm_label,
-                Config.HOME_IDLE_CALM_CHOICES, R.string.timing_seconds));
-        homeDimChoice = findViewById(R.id.homeDimChoice);
-        homeDimChoice.setOnClickListener(v -> pickHorizon(Config.HOME_IDLE_DIM_KEY, R.string.home_dim_label,
-                Config.HOME_IDLE_DIM_CHOICES, R.string.timing_seconds));
-        clockDimChoice = findViewById(R.id.clockDimChoice);
-        clockDimChoice.setOnClickListener(v -> pickHorizon(Config.CLOCK_DIM_AFTER_KEY, R.string.clock_dim_label,
-                Config.CLOCK_DIM_AFTER_CHOICES, R.string.timing_minutes));
-        clockBlankChoice = findViewById(R.id.clockBlankChoice);
-        clockBlankChoice.setOnClickListener(v -> pickHorizon(Config.CLOCK_BLANK_AFTER_KEY, R.string.clock_blank_label,
-                Config.CLOCK_BLANK_AFTER_CHOICES, R.string.timing_minutes));
+        buildHomeLook((LinearLayout) findViewById(R.id.homeLookRows));
         followThemeChoice = findViewById(R.id.followThemeChoice);
         followThemeChoice.setOnClickListener(v -> {
             if (!hasOnTvChoices()) return;
@@ -200,47 +184,118 @@ public final class LauncherSettingsActivity extends Activity {
         for (int i = views.length - 1; i >= 0; i--) row.addView(views[i]);
     }
 
+    /** How a Home look row shows and lists its values. */
+    private enum Fmt { NUMBER, SWITCH, PERCENT, SECONDS_OFF, MINUTES_OFF, SECONDS_NEVER, MINUTES_NEVER, PARALLAX, GREETING, PHOTOS }
+
+    private static final class HomeRow {
+        final String key;
+        final int label;
+        final int[] values;
+        final Fmt fmt;
+        TextView view;
+
+        HomeRow(String key, int label, int[] values, Fmt fmt) {
+            this.key = key;
+            this.label = label;
+            this.values = values;
+            this.fmt = fmt;
+        }
+    }
+
+    private final List<HomeRow> homeRows = new ArrayList<>();
+
     /**
-     * One Horizon row: its choices (0 reads "Off" for a timing), the saved one checked, and "Follow theme" to
-     * forget it. {@code unit} is the format of a timing's value, or 0 for the dock's plain tile count.
+     * The "Home look" rows: one table, one row view each, in the settings-row style. OK opens that row's list of
+     * values; the list's "Follow theme" forgets just that row. A row's choice is saved under its theme key
+     * (Config.*_KEY) and read back by Config.load after the theme, so it survives a theme push.
      */
-    private void pickHorizon(String key, int title, int[] values, int unit) {
-        String[] labels = new String[values.length];
-        int saved = choices.getInt(key, -1);
+    private void buildHomeLook(LinearLayout container) {
+        homeRows.add(new HomeRow(Config.DOCK_TILES_KEY, R.string.dock_tiles_label, Config.DOCK_TILE_CHOICES, Fmt.NUMBER));
+        homeRows.add(new HomeRow(Config.TOP_SHELF_KEY, R.string.top_shelf_label, Config.SWITCH_CHOICES, Fmt.SWITCH));
+        homeRows.add(new HomeRow(Config.TOP_SHELF_SCRIM_KEY, R.string.shelf_scrim_label, Config.TOP_SHELF_SCRIM_CHOICES, Fmt.PERCENT));
+        homeRows.add(new HomeRow(Config.INPUT_TILES_KEY, R.string.input_tiles_label, Config.SWITCH_CHOICES, Fmt.SWITCH));
+        homeRows.add(new HomeRow(Config.INPUT_TILES_EMPTY_KEY, R.string.input_tiles_empty_label, Config.SWITCH_CHOICES, Fmt.SWITCH));
+        homeRows.add(new HomeRow(Config.GREETING_MODE_KEY, R.string.greeting_label, Config.GREETING_CHOICES, Fmt.GREETING));
+        homeRows.add(new HomeRow(Config.FOCUS_PARALLAX_KEY, R.string.focus_parallax_label, Config.FOCUS_PARALLAX_CHOICES, Fmt.PARALLAX));
+        homeRows.add(new HomeRow(Config.FOCUS_SHEEN_KEY, R.string.focus_sheen_label, Config.SWITCH_CHOICES, Fmt.SWITCH));
+        homeRows.add(new HomeRow(Config.WALLPAPER_VIDEO_KEY, R.string.video_wallpaper_label, Config.SWITCH_CHOICES, Fmt.SWITCH));
+        homeRows.add(new HomeRow(Config.VIDEO_MINUTES_KEY, R.string.clip_change_label, Config.VIDEO_MINUTES_CHOICES, Fmt.MINUTES_NEVER));
+        homeRows.add(new HomeRow(Config.CAPTION_SECONDS_KEY, R.string.caption_fades_label, Config.CAPTION_SECONDS_CHOICES, Fmt.SECONDS_NEVER));
+        homeRows.add(new HomeRow(Config.HOME_IDLE_SHIFT_KEY, R.string.idle_shift_label, Config.SWITCH_CHOICES, Fmt.SWITCH));
+        homeRows.add(new HomeRow(Config.HOME_IDLE_CALM_KEY, R.string.home_calm_label, Config.HOME_IDLE_CALM_CHOICES, Fmt.SECONDS_OFF));
+        homeRows.add(new HomeRow(Config.HOME_IDLE_DIM_KEY, R.string.home_dim_label, Config.HOME_IDLE_DIM_CHOICES, Fmt.SECONDS_OFF));
+        homeRows.add(new HomeRow(Config.CLOCK_DIM_AFTER_KEY, R.string.clock_dim_label, Config.CLOCK_DIM_AFTER_CHOICES, Fmt.MINUTES_OFF));
+        homeRows.add(new HomeRow(Config.CLOCK_BLANK_AFTER_KEY, R.string.clock_blank_label, Config.CLOCK_BLANK_AFTER_CHOICES, Fmt.MINUTES_OFF));
+        homeRows.add(new HomeRow(Config.SCREENSAVER_PHOTOS_KEY, R.string.screensaver_photos_label, Config.SWITCH_CHOICES, Fmt.PHOTOS));
+        homeRows.add(new HomeRow(Config.REDUCED_MOTION_KEY, R.string.reduced_motion_label, Config.SWITCH_CHOICES, Fmt.SWITCH));
+        float dp = getResources().getDisplayMetrics().density;
+        for (HomeRow row : homeRows) {
+            TextView view = new TextView(this, null, 0, R.style.SettingsRow);
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, Math.round(52 * dp));
+            params.topMargin = Math.round(10 * dp);
+            view.setLayoutParams(params);
+            view.setOnClickListener(v -> pickHomeRow(row));
+            container.addView(view);
+            row.view = view;
+        }
+    }
+
+    private void pickHomeRow(HomeRow row) {
+        String[] labels = new String[row.values.length];
+        int saved = choices.getInt(row.key, -1);
         int checked = -1;
-        for (int i = 0; i < values.length; i++) {
-            labels[i] = horizonValue(values[i], unit);
-            if (values[i] == saved) checked = i;
+        for (int i = 0; i < labels.length; i++) {
+            labels[i] = homeValue(row.fmt, row.values[i]);
+            if (row.values[i] == saved) checked = i;
         }
         new AlertDialog.Builder(this)
-                .setTitle(title)
+                .setTitle(row.label)
                 .setSingleChoiceItems(labels, checked, (dialog, which) -> {
                     dialog.dismiss();
-                    choices.edit().putInt(key, values[which]).apply();
-                    horizonChanged();
+                    choices.edit().putInt(row.key, row.values[which]).apply();
+                    homeChanged();
                 })
                 .setNeutralButton(R.string.follow_theme_row, (dialog, which) -> {
-                    Config.clearHorizonChoice(choices.edit(), key).apply();
-                    horizonChanged();
+                    Config.clearHorizonChoice(choices.edit(), row.key).apply();
+                    homeChanged();
                 })
                 .setNegativeButton(android.R.string.cancel, null)
                 .show();
     }
 
-    private void horizonChanged() {
+    private void homeChanged() {
         columns = Config.load(this).columns;   // dock tiles win over the columns row
         changed();
         refresh();
     }
 
-    private String horizonValue(int value, int unit) {
-        if (unit == 0) return String.valueOf(value);
-        return value == 0 ? getString(R.string.off) : getString(unit, value);
+    private String homeValue(Fmt fmt, int value) {
+        switch (fmt) {
+            case SWITCH: return getString(value == 1 ? R.string.on : R.string.off);
+            case PERCENT: return getString(R.string.timing_percent, value);
+            case SECONDS_OFF: return value == 0 ? getString(R.string.off) : getString(R.string.timing_seconds, value);
+            case MINUTES_OFF: return value == 0 ? getString(R.string.off) : getString(R.string.timing_minutes, value);
+            case SECONDS_NEVER: return value == 0 ? getString(R.string.never) : getString(R.string.timing_seconds, value);
+            case MINUTES_NEVER: return value == 0 ? getString(R.string.never) : getString(R.string.timing_minutes, value);
+            case PARALLAX: return getString(value == 0 ? R.string.off : value <= 2 ? R.string.level_low
+                    : value <= 4 ? R.string.level_medium : R.string.level_high);
+            case GREETING: return getString(value == Config.GREETING_OFF ? R.string.off
+                    : value == Config.GREETING_ALWAYS ? R.string.greeting_always : R.string.greeting_once);
+            case PHOTOS: return getString(value == 1 ? R.string.photos_folder : R.string.photos_home);
+            default: return String.valueOf(value);
+        }
     }
 
-    private String horizonState(String key, int unit) {
-        int saved = choices.getInt(key, -1);
-        return saved < 0 ? getString(R.string.wallpaper_theme_default) : horizonValue(saved, unit);
+    /** A row's state text: its saved value, or Theme default; the screensaver photos row also says when its folder is empty. */
+    private String homeState(HomeRow row) {
+        int saved = choices.getInt(row.key, -1);
+        if (saved < 0) return getString(R.string.wallpaper_theme_default);
+        String text = homeValue(row.fmt, saved);
+        if (row.fmt == Fmt.PHOTOS && saved == 1 && ScreensaverStills.images(Config.dir(this), ScreensaverStills.FOLDER).isEmpty()) {
+            text += getString(R.string.photos_empty);
+        }
+        return text;
     }
 
     private void showWallpaperPicker() {
@@ -377,12 +432,15 @@ public final class LauncherSettingsActivity extends Activity {
                         : wallpaperCurrent != null ? wallpaperCurrent
                         : getString(R.string.wallpaper_theme_default)));
         openOnStartChoice.setText(getString(R.string.open_on_start_state, openOnStartLabel()));
-        dockTilesChoice.setText(getString(R.string.dock_tiles_state, horizonState(Config.DOCK_TILES_KEY, 0)));
-        homeCalmChoice.setText(getString(R.string.home_calm_state, horizonState(Config.HOME_IDLE_CALM_KEY, R.string.timing_seconds)));
-        homeDimChoice.setText(getString(R.string.home_dim_state, horizonState(Config.HOME_IDLE_DIM_KEY, R.string.timing_seconds)));
-        clockDimChoice.setText(getString(R.string.clock_dim_state, horizonState(Config.CLOCK_DIM_AFTER_KEY, R.string.timing_minutes)));
-        clockBlankChoice.setText(getString(R.string.clock_blank_state, horizonState(Config.CLOCK_BLANK_AFTER_KEY, R.string.timing_minutes)));
+        for (HomeRow row : homeRows) {
+            row.view.setText(getString(R.string.home_row_state, getString(row.label), homeState(row)));
+        }
         followThemeChoice.setSelected(!hasOnTvChoices());
+    }
+
+    private boolean anyHorizonChoice() {
+        for (String key : Config.HORIZON_KEYS) if (choices.contains(key)) return true;
+        return false;
     }
 
     private boolean hasOnTvChoices() {
@@ -390,9 +448,7 @@ public final class LauncherSettingsActivity extends Activity {
                 || choices.contains("animations") || choices.contains("advanced_effects")
                 || choices.contains(Config.WALLPAPER_CHOICE_KEY) || choices.contains(Config.DOCK_OPACITY_KEY)
                 || choices.contains(Config.CLOCK_FORMAT_KEY) || choices.contains(OpenOnStart.KEY)
-                || choices.contains(Config.DOCK_TILES_KEY) || choices.contains(Config.HOME_IDLE_CALM_KEY)
-                || choices.contains(Config.HOME_IDLE_DIM_KEY) || choices.contains(Config.CLOCK_DIM_AFTER_KEY)
-                || choices.contains(Config.CLOCK_BLANK_AFTER_KEY);
+                || anyHorizonChoice();
     }
 
     private void open(Intent intent) {

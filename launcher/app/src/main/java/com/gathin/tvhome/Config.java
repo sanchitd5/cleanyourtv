@@ -348,6 +348,59 @@ final class Config {
     static final int[] HOME_IDLE_DIM_CHOICES = {0, 60, 90, 120, 300};
     static final int[] CLOCK_DIM_AFTER_CHOICES = {0, 2, 5, 10, 15};
     static final int[] CLOCK_BLANK_AFTER_CHOICES = {0, 15, 30, 60, 120};
+    /*
+     * The rest of the Horizon settings, on the same terms: a choice saved under the theme key's own name wins
+     * over the theme, survives a theme push, and is forgotten by that row's "Follow theme". A switch is stored
+     * as 1 (On) or 0 (Off); a number as itself, where 0 is "Off" or "Never". The greeting is one choice
+     * over two theme keys (show_greeting and greeting_once), and the screensaver's pictures one over
+     * screensaver_wallpapers.
+     */
+    static final String TOP_SHELF_KEY = "top_shelf";
+    static final String TOP_SHELF_SCRIM_KEY = "top_shelf_scrim";
+    static final String INPUT_TILES_KEY = "input_tiles";
+    static final String INPUT_TILES_EMPTY_KEY = "input_tiles_show_empty";
+    static final String GREETING_MODE_KEY = "greeting_mode";
+    static final String FOCUS_PARALLAX_KEY = "focus_parallax";
+    static final String FOCUS_SHEEN_KEY = "focus_sheen";
+    static final String WALLPAPER_VIDEO_KEY = "wallpaper_video";
+    static final String VIDEO_MINUTES_KEY = "wallpaper_video_rotation_minutes";
+    static final String CAPTION_SECONDS_KEY = "wallpaper_caption_seconds";
+    static final String HOME_IDLE_SHIFT_KEY = "home_idle_shift";
+    static final String REDUCED_MOTION_KEY = "reduced_motion";
+    static final String SCREENSAVER_PHOTOS_KEY = "screensaver_photos";
+    static final int GREETING_OFF = 0, GREETING_ALWAYS = 1, GREETING_ONCE = 2;
+    static final int[] TOP_SHELF_SCRIM_CHOICES = {60, 80, 100};
+    static final int[] FOCUS_PARALLAX_CHOICES = {0, 2, 4, 6};
+    static final int[] VIDEO_MINUTES_CHOICES = {5, 10, 20, 30, 0};   // 0 = never
+    static final int[] CAPTION_SECONDS_CHOICES = {6, 12, 30, 0};     // 0 = never
+    static final int[] GREETING_CHOICES = {GREETING_OFF, GREETING_ALWAYS, GREETING_ONCE};
+    static final int[] SWITCH_CHOICES = {0, 1};
+    /** Every Horizon key a row can write, so "Follow theme" can forget them all. */
+    static final String[] HORIZON_KEYS = {DOCK_TILES_KEY, HOME_IDLE_CALM_KEY, HOME_IDLE_DIM_KEY, CLOCK_DIM_AFTER_KEY,
+            CLOCK_BLANK_AFTER_KEY, TOP_SHELF_KEY, TOP_SHELF_SCRIM_KEY, INPUT_TILES_KEY, INPUT_TILES_EMPTY_KEY,
+            GREETING_MODE_KEY, FOCUS_PARALLAX_KEY, FOCUS_SHEEN_KEY, WALLPAPER_VIDEO_KEY, VIDEO_MINUTES_KEY,
+            CAPTION_SECONDS_KEY, HOME_IDLE_SHIFT_KEY, REDUCED_MOTION_KEY, SCREENSAVER_PHOTOS_KEY};
+
+    /** A switch chosen on the TV: 1 is On, 0 is Off, anything else (absent is -1) leaves the theme's value. */
+    static boolean chosenSwitch(int chosen, boolean theme) {
+        return chosen == 1 ? true : chosen == 0 ? false : theme;
+    }
+
+    /** The greeting as one choice: {show_greeting, greeting_once} for a mode, or the theme's own when none is chosen. */
+    static boolean[] chosenGreeting(int mode, boolean showTheme, boolean onceTheme) {
+        switch (mode) {
+            case GREETING_OFF: return new boolean[]{false, false};
+            case GREETING_ALWAYS: return new boolean[]{true, false};
+            case GREETING_ONCE: return new boolean[]{true, true};
+            default: return new boolean[]{showTheme, onceTheme};
+        }
+    }
+
+    /** The mode a pair of theme values amounts to, for showing what "Follow theme" would give. */
+    static int greetingMode(boolean show, boolean once) {
+        return !show ? GREETING_OFF : once ? GREETING_ONCE : GREETING_ALWAYS;
+    }
+
     private static final int HOME_IDLE_CALM_MAX = 600, HOME_IDLE_DIM_MAX = 3600,
             CLOCK_DIM_AFTER_MAX = 240, CLOCK_BLANK_AFTER_MAX = 720;
 
@@ -363,8 +416,8 @@ final class Config {
 
     /** Forgets every Horizon choice made on the TV, so the theme decides again ("Follow theme"). Does not commit. */
     static SharedPreferences.Editor clearHorizonChoices(SharedPreferences.Editor editor) {
-        return editor.remove(DOCK_TILES_KEY).remove(HOME_IDLE_CALM_KEY).remove(HOME_IDLE_DIM_KEY)
-                .remove(CLOCK_DIM_AFTER_KEY).remove(CLOCK_BLANK_AFTER_KEY);
+        for (String key : HORIZON_KEYS) editor.remove(key);
+        return editor;
     }
 
     /** Forgets one Horizon choice (a row's own "Follow theme"). Does not commit. */
@@ -836,6 +889,18 @@ final class Config {
         homeIdleDimSeconds = chosenTiming(choices.getInt(HOME_IDLE_DIM_KEY, -1), homeIdleDimSeconds, HOME_IDLE_DIM_MAX);
         clockDimAfterMinutes = chosenTiming(choices.getInt(CLOCK_DIM_AFTER_KEY, -1), clockDimAfterMinutes, CLOCK_DIM_AFTER_MAX);
         clockBlankAfterMinutes = chosenTiming(choices.getInt(CLOCK_BLANK_AFTER_KEY, -1), clockBlankAfterMinutes, CLOCK_BLANK_AFTER_MAX);
+        topShelf = chosenSwitch(choices.getInt(TOP_SHELF_KEY, -1), topShelf);
+        topShelfScrim = chosenTiming(choices.getInt(TOP_SHELF_SCRIM_KEY, -1), topShelfScrim, 100);
+        inputTiles = chosenSwitch(choices.getInt(INPUT_TILES_KEY, -1), inputTiles);
+        inputTilesShowEmpty = chosenSwitch(choices.getInt(INPUT_TILES_EMPTY_KEY, -1), inputTilesShowEmpty);
+        boolean[] greeting = chosenGreeting(choices.getInt(GREETING_MODE_KEY, -1), showGreeting, greetingOnce);
+        showGreeting = greeting[0];
+        greetingOnce = greeting[1];
+        focusParallax = chosenTiming(choices.getInt(FOCUS_PARALLAX_KEY, -1), focusParallax, 6);
+        focusSheen = chosenSwitch(choices.getInt(FOCUS_SHEEN_KEY, -1), focusSheen);
+        homeIdleShift = chosenSwitch(choices.getInt(HOME_IDLE_SHIFT_KEY, -1), homeIdleShift);
+        wallpaperCaptionSeconds = chosenTiming(choices.getInt(CAPTION_SECONDS_KEY, -1), wallpaperCaptionSeconds, 600);
+        reducedMotion = chosenSwitch(choices.getInt(REDUCED_MOTION_KEY, -1), reducedMotion);
         int chosenRows = choices.getInt(ROWS_BELOW_DOCK_KEY, rowsBelow);
         if (chosenRows >= 0 && chosenRows <= 3) rowsBelow = chosenRows;
         animations = choices.getBoolean("animations", animations);
@@ -871,10 +936,11 @@ final class Config {
             wallpaperEnabled = !chosen.isEmpty();
         }
         // wallpaper_video: the theme's clips play over the picture, unless one was picked on the TV (or none).
-        List<File> videos = chosen == null && wallpaperEnabled && dir != null && json != null
-                && bool(json, "wallpaper_video", false)
+        boolean videoOn = chosenSwitch(choices.getInt(WALLPAPER_VIDEO_KEY, -1), json != null && bool(json, "wallpaper_video", false));
+        List<File> videos = chosen == null && wallpaperEnabled && dir != null && videoOn
                 ? WallpaperRotation.videos(new File(dir, "wallpapers")) : Collections.emptyList();
-        int videoMinutes = json == null ? 0 : integer(json, "wallpaper_video_rotation_minutes", 10, 0, 1440);
+        int videoMinutes = chosenTiming(choices.getInt(VIDEO_MINUTES_KEY, -1),
+                json == null ? 0 : integer(json, "wallpaper_video_rotation_minutes", 10, 0, 1440), 1440);
         // A festive skin comes only from a theme; config.xml has no festival. seasonal_skin names one the same way
         // but launchers before it ignore the key, so a theme can carry it without older ones showing the diya skin.
         Festival festival = json == null ? Festival.NONE : Festival.parse(festivalName(json),

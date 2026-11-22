@@ -39,12 +39,21 @@ final class ScreensaverStills {
         return captions == null || picture == null ? null : captions.get(picture.getName());
     }
 
-    /** The folder's stills for the theme in {@code ctx}, or none. */
+    /**
+     * Whether the screensaver uses the folder: a choice made on the TV (1 the folder, 0 Home's wallpapers) wins over
+     * the theme, which uses it when it names the folder. Absent is -1.
+     */
+    static boolean useFolder(int chosen, String themeKey) {
+        return chosen == 1 || (chosen != 0 && !folder(themeKey).isEmpty());
+    }
+
+    /** The folder's stills for the theme in {@code ctx} and the choice made on the TV, or none. */
     static List<File> load(Context ctx) {
         File dir = Config.dir(ctx);
         if (dir == null) return Collections.emptyList();
-        String name = folder(keyOf(new File(dir, Config.FILE_NAME)));
-        return images(dir, name);
+        int chosen = ctx.getSharedPreferences(Config.SETTINGS_NAME, Context.MODE_PRIVATE)
+                .getInt(Config.SCREENSAVER_PHOTOS_KEY, -1);
+        return useFolder(chosen, keyOf(new File(dir, Config.FILE_NAME))) ? images(dir, FOLDER) : Collections.emptyList();
     }
 
     private static String keyOf(File config) {

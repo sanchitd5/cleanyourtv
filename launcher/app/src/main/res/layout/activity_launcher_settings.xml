@@ -137,29 +137,18 @@
             android:visibility="gone" />
 
         <TextView
-            android:id="@+id/dockTilesChoice"
-            style="@style/SettingsRow"
-            android:layout_marginTop="28dp" />
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="28dp"
+            android:text="@string/home_look"
+            android:textColor="#FFFFFFFF"
+            android:textSize="20sp" />
 
-        <TextView
-            android:id="@+id/homeCalmChoice"
-            style="@style/SettingsRow"
-            android:layout_marginTop="10dp" />
-
-        <TextView
-            android:id="@+id/homeDimChoice"
-            style="@style/SettingsRow"
-            android:layout_marginTop="10dp" />
-
-        <TextView
-            android:id="@+id/clockDimChoice"
-            style="@style/SettingsRow"
-            android:layout_marginTop="10dp" />
-
-        <TextView
-            android:id="@+id/clockBlankChoice"
-            style="@style/SettingsRow"
-            android:layout_marginTop="10dp" />
+        <LinearLayout
+            android:id="@+id/homeLookRows"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
 
         <TextView
             android:id="@+id/followThemeChoice"
