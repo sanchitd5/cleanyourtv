@@ -111,7 +111,10 @@ final class TopBar {
         spare = prevW != null ? prevW : new int[6];
         prevW = w;
         // tvos: the capsule's measured width must match the expected one, the time inside it; split has no capsule.
-        boolean capsuleOk = !tvos || (rc.width() > 0 && buttons.getWidth() == expectedCapsule);
+        // buttons itself draws the capsule fill (top_capsule_bg). Its width counts when laid out with the padding, or as its
+        // content width (as measured last) plus the end padding place() applied, which is the width the next layout gives it.
+        int w0 = buttons.getWidth(), pad = buttons.getPaddingRight();
+        boolean capsuleOk = !tvos || (rc.width() > 0 && pad > 0 && (w0 == expectedCapsule || w0 + pad == expectedCapsule));
         if (elapsed >= TopBarLayout.SETTLE_TIMEOUT_MS) {
             if (!forced) {   // one more sizing pass, then show whatever it gives
                 forced = true;
@@ -330,8 +333,6 @@ final class TopBar {
             fitScrim(row.end, base, greetingBase);
         }
         setTranslation(buttons, right - (layoutX(buttons) + buttons.getWidth()), centre - (layoutY(buttons) + buttons.getHeight() / 2f));
-        Log.d(TAG, "place capsule=" + buttons.getWidth() + " expected=" + expectedCapsule + " padEnd=" + buttons.getPaddingRight()
-                + " clockTx=" + clock.getTranslationX() + " clockW=" + rc.width() + " ampmW=" + ra.width() + " revealed=" + revealed);   // temporary
         if (!revealed) checkReveal();
     }
 
