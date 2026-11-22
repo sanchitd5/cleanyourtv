@@ -83,4 +83,11 @@ public class ShelfScrimTest {
             last = a;
         }
     }
+
+    @Test public void theCornerAlphaAtMatchesTheCurveAndStretches() {
+        assertEquals(0.66f, ShelfScrim.cornerAlphaAt(0, 0, 1920, 1080, 1f), 1e-6f);
+        // Stretching by s moves the same alpha s times further right.
+        assertEquals(ShelfScrim.cornerAlphaAt(300, 100, 1920, 1080, 1f), ShelfScrim.cornerAlphaAt(375, 100, 1920, 1080, 1.25f), 1e-5f);
+        assertEquals(0f, ShelfScrim.cornerAlphaAt(1056, 0, 1920, 1080, 1f), 1e-6f);
+    }
 }

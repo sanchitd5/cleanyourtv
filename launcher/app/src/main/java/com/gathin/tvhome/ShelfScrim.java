@@ -41,7 +41,7 @@ final class ShelfScrim {
         return rampAlpha(y) * clampPercent(percent) / 100f;
     }
 
-    /** Alpha of the corner gradient at a distance from the corner as a fraction of its radius: 0.66 at 0, 0.62 at 0.6 (where the date ends), 0 at 1 and beyond. */
+    /** Alpha of the corner gradient at a distance from the corner as a fraction of its radius: 0.66 at 0, 0.62 at 0.6, 0 at 1 and beyond. */
     static float cornerAlpha(float r) {
         if (r <= 0f) return 0.66f;
         if (r >= 1f) return 0f;
@@ -71,20 +71,47 @@ final class ShelfScrim {
         paint.setShader(new LinearGradient(0, 0, 0, SIZE, colors, RAMP_Y, Shader.TileMode.CLAMP));
         new Canvas(ramp).drawRect(0, 0, SIZE, SIZE, paint);
 
+        BitmapDrawable a = new BitmapDrawable(res, ramp);
+        a.setGravity(Gravity.FILL);
+        a.setFilterBitmap(true);
+        return new LayerDrawable(new Drawable[]{a, corner(res, percent, rtl, 1f)});
+    }
+
+    /** The corner layer alone, stretched horizontally by scaleX (1 = the classic shape; the top bar's split layout asks for up to 1.25). */
+    static BitmapDrawable corner(Resources res, int percent, boolean rtl, float scaleX) {
+        float s = Math.max(1f, Math.min(1.8f, scaleX));   // above 1.82 the radius would leave the bitmap
         Bitmap corner = Bitmap.createBitmap(SIZE, SIZE, Bitmap.Config.ARGB_8888);
+        Paint paint = new Paint();
+        paint.setDither(true);
         float[] stops = {0f, 0.3f, 0.6f, 0.8f, 1f};
         int[] cc = new int[stops.length];
         for (int i = 0; i < stops.length; i++) cc[i] = color(cornerAlpha(stops[i], percent));
-        paint.setShader(new RadialGradient(rtl ? SIZE : 0, 0, 0.55f * SIZE, cc, stops, Shader.TileMode.CLAMP));
-        new Canvas(corner).drawRect(0, 0, SIZE, SIZE, paint);
-
-        BitmapDrawable a = new BitmapDrawable(res, ramp), b = new BitmapDrawable(res, corner);
-        a.setGravity(Gravity.FILL);
+        paint.setShader(new RadialGradient(rtl ? SIZE / s : 0, 0, 0.55f * SIZE, cc, stops, Shader.TileMode.CLAMP));
+        Canvas canvas = new Canvas(corner);
+        canvas.scale(s, 1f);
+        canvas.drawRect(0, 0, SIZE / s, SIZE, paint);
+        BitmapDrawable b = new BitmapDrawable(res, corner);
         b.setGravity(Gravity.FILL);
-        a.setFilterBitmap(true);
         b.setFilterBitmap(true);
-        return new LayerDrawable(new Drawable[]{a, b});
+        return b;
     }
+
+    /** Alpha at which white text at 90 % ink keeps 4.5:1 over a pure white frame. */
+    static final float READABLE_ALPHA = 0.57f;
+
+    /**
+     * Corner alpha (at top_shelf_scrim 100) at pixel (x, y) of a w by h view, the corner stretched by scaleX: the
+     * gradient's radius is 0.55 of each side, 0.55 * scaleX of the width. Pure, for tests and the top bar's checks.
+     */
+    static float cornerAlphaAt(float x, float y, float w, float h, float scaleX) {
+        double dx = x / (0.55 * w * scaleX), dy = y / (0.55 * h);
+        return cornerAlpha((float) Math.sqrt(dx * dx + dy * dy));
+    }
+
+    private static final float ZONE_R = 0.6f + 0.4f * (1f - READABLE_ALPHA / 0.62f);   // 0.632: where cornerAlpha falls to 0.57
+
+    /** Semi-axes in px of the 4.5:1 zone at 1920x1080, scaleX 1: 667 wide, 375 tall. */
+    static final float ZONE_W = 0.55f * 1920f * ZONE_R, ZONE_H = 0.55f * 1080f * ZONE_R;
 
     private static int color(float alpha) {
         return Math.round(Math.max(0f, Math.min(1f, alpha)) * 255f) << 24 | TINT;
