@@ -185,6 +185,9 @@
     <string name="photos_home">Home wallpapers</string>
     <string name="photos_folder">Screensaver folder</string>
     <string name="photos_empty"> (empty)</string>
+    <string name="font_label">Font</string>
+    <string name="font_outfit">Outfit</string>
+    <string name="font_inter">Inter</string>
     <string name="reduced_motion_label">Reduced motion</string>
     <string name="timing_percent">%1$d %%</string>
     <string name="level_low">Low</string>

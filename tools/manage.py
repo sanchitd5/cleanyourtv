@@ -594,6 +594,7 @@ ENUMS = {
     "glass_style": (("glass", "rim", "halo"), "glass", True),
     "clock_format": (("12", "24", "system"), "system", True),
     "wallpaper_order": (("shuffle", "sequential"), "shuffle", False),
+    "font": (("outfit", "inter"), "outfit", True),
 }
 
 

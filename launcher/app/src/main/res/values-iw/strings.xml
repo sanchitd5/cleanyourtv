@@ -179,6 +179,9 @@
     <string name="photos_home">טפטי הבית</string>
     <string name="photos_folder">תיקיית שומר המסך</string>
     <string name="photos_empty"> (ריקה)</string>
+    <string name="font_label">גופן</string>
+    <string name="font_outfit">Outfit</string>
+    <string name="font_inter">Inter</string>
     <string name="reduced_motion_label">תנועה מופחתת</string>
     <string name="timing_percent">%1$d %%</string>
     <string name="level_low">נמוכה</string>

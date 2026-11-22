@@ -342,6 +342,14 @@ final class Config {
         return inputTiles && dockRow && !singleRow && !INPUT_GROUP_OFF.equals(inputGroup);
     }
 
+    // --- Font (theme key font; a choice made on the TV wins, see HOME_FONT_KEY): one contiguous block. ---
+    /** font's two words (theme key and on-TV row). */
+    static final String FONT_OUTFIT = "outfit", FONT_INTER = "inter";
+    /** {@link #FONT_OUTFIT} (default) or {@link #FONT_INTER}. */
+    final String font;
+    /** On-TV "Font" row: 0 Outfit, 1 Inter, absent -1 = the theme decides. In {@link #HORIZON_KEYS}, so "Follow theme" clears it. */
+    static final String HOME_FONT_KEY = "font";
+
     /** input_group's three words (theme-only). */
     static final String INPUT_GROUP_OFF = "off", INPUT_GROUP_DIVIDER = "divider", INPUT_GROUP_SEPARATE = "separate";
     /**
@@ -411,7 +419,7 @@ final class Config {
             CLOCK_BLANK_AFTER_KEY, TOP_SHELF_KEY, TOP_SHELF_SCRIM_KEY, INPUT_TILES_KEY, INPUT_TILES_EMPTY_KEY,
             GREETING_MODE_KEY, FOCUS_PARALLAX_KEY, FOCUS_SHEEN_KEY, WALLPAPER_VIDEO_KEY, VIDEO_MINUTES_KEY,
             CAPTION_SECONDS_KEY, HOME_IDLE_SHIFT_KEY, REDUCED_MOTION_KEY, SCREENSAVER_PHOTOS_KEY,
-            REDUCE_TRANSPARENCY_KEY};
+            REDUCE_TRANSPARENCY_KEY, HOME_FONT_KEY};
 
     /** A switch chosen on the TV: 1 is On, 0 is Off, anything else (absent is -1) leaves the theme's value. */
     static boolean chosenSwitch(int chosen, boolean theme) {
@@ -477,7 +485,7 @@ final class Config {
                    boolean topShelf, int topShelfScrim, int focusParallax, boolean focusSheen, boolean inputTiles, boolean inputTilesShowEmpty,
                    Map<String, String> inputLogos, boolean greetingOnce, int homeIdleCalmSeconds, int homeIdleDimSeconds, boolean homeIdleShift,
                    int wallpaperCaptionSeconds, int clockShiftSeconds, int clockDimAfterMinutes, int clockDimFloor, int clockBlankAfterMinutes,
-                   boolean glassSurfaces, boolean glassLiveBackdrop, boolean glassReduceTransparency, String inputGroup) {
+                   boolean glassSurfaces, boolean glassLiveBackdrop, boolean glassReduceTransparency, String inputGroup, String font) {
         this.handleViewInputs = handleViewInputs;
         this.tileMenu = tileMenu;
         this.inputKeycodes = inputKeycodes;
@@ -619,6 +627,7 @@ final class Config {
         this.glassLiveBackdrop = glassLiveBackdrop;
         this.glassReduceTransparency = glassReduceTransparency;
         this.inputGroup = inputGroup(inputGroup);
+        this.font = Fonts.font(font);
         this.glowStyle = glowStyle(glowStyle);
         this.wallpaperCaptions = wallpaperCaptions;
         this.glassStyle = glassStyle(glassStyle);
@@ -777,6 +786,7 @@ final class Config {
         boolean glassLiveBackdrop = false;
         boolean glassReduceTransparency = false;
         String inputGroup = INPUT_GROUP_OFF;
+        String font = FONT_OUTFIT;
         boolean applied = false;
 
         File dir = dir(ctx);
@@ -916,6 +926,7 @@ final class Config {
             glassLiveBackdrop = bool(json, "glass_live_backdrop", glassLiveBackdrop);
             glassReduceTransparency = bool(json, "glass_reduce_transparency", glassReduceTransparency);
             inputGroup = string(json, "input_group", inputGroup);
+            font = string(json, "font", font);
             glowStyle = string(json, "glow_style", glowStyle);
             glassStyle = string(json, "glass_style", glassStyle);
         }
@@ -943,6 +954,7 @@ final class Config {
         greetingOnce = greeting[1];
         focusParallax = chosenTiming(choices.getInt(FOCUS_PARALLAX_KEY, -1), focusParallax, 6);
         focusSheen = chosenSwitch(choices.getInt(FOCUS_SHEEN_KEY, -1), focusSheen);
+        font = Fonts.chosen(choices.getInt(HOME_FONT_KEY, -1), font);
         homeIdleShift = chosenSwitch(choices.getInt(HOME_IDLE_SHIFT_KEY, -1), homeIdleShift);
         wallpaperCaptionSeconds = chosenTiming(choices.getInt(CAPTION_SECONDS_KEY, -1), wallpaperCaptionSeconds, 600);
         reducedMotion = chosenSwitch(choices.getInt(REDUCED_MOTION_KEY, -1), reducedMotion);
@@ -1011,7 +1023,7 @@ final class Config {
                 topShelf, topShelfScrim, focusParallax, focusSheen, inputTiles, inputTilesShowEmpty, packageMap(inputLogos), greetingOnce,
                 homeIdleCalmSeconds, homeIdleDimSeconds, homeIdleShift, wallpaperCaptionSeconds, clockShiftSeconds,
                 clockDimAfterMinutes, clockDimFloor, clockBlankAfterMinutes,
-                glassSurfaces, glassLiveBackdrop, glassReduceTransparency, inputGroup);
+                glassSurfaces, glassLiveBackdrop, glassReduceTransparency, inputGroup, font);
     }
 
     /**
