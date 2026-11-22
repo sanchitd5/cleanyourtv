@@ -43,7 +43,22 @@ final class TopBar {
     private final int screenW;
     private final Rect rc = new Rect(), ra = new Rect(), rd = new Rect(), rg = new Rect(), rh = new Rect();
 
-    private boolean styled, probed;
+    private boolean styled, probed, revealed, forced;
+    private long hiddenAt;
+    private int expectedCapsule;
+    private int pendingPad = -1;   // the capsule end padding posted for after the current layout pass
+    private int[] prevW, spare = new int[6];
+    private final int[] btnW = new int[16];
+    private final Runnable settle = new Runnable() {
+        @Override public void run() {
+            if (revealed) return;
+            place();
+            // place() bails out while the clock has no width yet: the timeout must still show the bar
+            if (!revealed && android.os.SystemClock.uptimeMillis() - hiddenAt >= TopBarLayout.SETTLE_TIMEOUT_MS) {
+                if (forced) show(); else { forced = true; buttons.requestLayout(); header.postOnAnimation(this); }
+            }
+        }
+    };
     private float scaleX = 1f;
 
     private TopBar(Activity a, Config cfg, float density, String mode) {
@@ -71,11 +86,60 @@ final class TopBar {
         bar.header.getViewTreeObserver().addOnPreDrawListener(new ViewTreeObserver.OnPreDrawListener() {
             @Override public boolean onPreDraw() {
                 bar.header.getViewTreeObserver().removeOnPreDrawListener(this);
+                bar.hide();
                 bar.style();
                 return false;   // the restyle asked for another layout; draw only after it
             }
         });
         return bar;
+    }
+
+    // ---- reveal guard: neither the clock group nor the capsule is drawn until the capsule really contains the time ----
+
+    private void hide() {
+        hiddenAt = android.os.SystemClock.uptimeMillis();
+        leftBlock.setAlpha(0f);
+        buttons.setAlpha(0f);
+        header.postDelayed(settle, TopBarLayout.SETTLE_TIMEOUT_MS);   // never stays hidden if fonts do not settle
+    }
+
+    private void checkReveal() {
+        int[] w = spare;
+        w[0] = clock.getWidth(); w[1] = ampm.getWidth(); w[2] = date.getWidth();
+        w[3] = rc.width(); w[4] = ra.width(); w[5] = rd.width();
+        long elapsed = android.os.SystemClock.uptimeMillis() - hiddenAt;
+        boolean ok = TopBarLayout.stable(prevW, w, elapsed);
+        spare = prevW != null ? prevW : new int[6];
+        prevW = w;
+        // tvos: the capsule's measured width must match the expected one, the time inside it; split has no capsule.
+        // buttons itself draws the capsule fill (top_capsule_bg). Its width counts when laid out with the padding, or as its
+        // content width (as measured last) plus the end padding place() applied, which is the width the next layout gives it.
+        int w0 = buttons.getWidth(), pad = buttons.getPaddingRight();
+        boolean capsuleOk = !tvos || (rc.width() > 0 && pad > 0 && w0 == expectedCapsule);   // laid out with the padding
+        if (elapsed >= TopBarLayout.SETTLE_TIMEOUT_MS) {
+            if (!forced) {   // one more sizing pass, then show whatever it gives
+                forced = true;
+                buttons.requestLayout();
+                header.postOnAnimation(settle);
+                return;
+            }
+        } else if (!ok || !capsuleOk) {
+            header.postOnAnimation(settle);   // measure again next frame
+            return;
+        }
+        show();
+    }
+
+    private void show() {
+        revealed = true;
+        header.removeCallbacks(settle);
+        if (Glass.animations() && !Glass.reducedMotion()) {
+            leftBlock.animate().alpha(1f).setDuration(TopBarLayout.REVEAL_MS).start();
+            buttons.animate().alpha(1f).setDuration(TopBarLayout.REVEAL_MS).start();
+        } else {
+            leftBlock.setAlpha(1f);
+            buttons.setAlpha(1f);
+        }
     }
 
     // ---- once: styles and sizes, after the classic layout has been measured ----
@@ -130,6 +194,13 @@ final class TopBar {
         View.OnLayoutChangeListener again = (v, l, t, r, b, ol, ot, or, ob) -> place();
         header.addOnLayoutChangeListener(again);
         for (View v : new View[]{clock, ampm, date, greeting, buttons}) v.addOnLayoutChangeListener(again);
+        // A minute tick, a date change or a font switch changes the ink width even when the view's bounds do not move.
+        android.text.TextWatcher watch = new android.text.TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int a, int b, int c) {}
+            @Override public void onTextChanged(CharSequence s, int a, int b, int c) {}
+            @Override public void afterTextChanged(android.text.Editable e) { place(); }
+        };
+        for (TextView v : new TextView[]{clock, ampm, date}) v.addTextChangedListener(watch);
     }
 
     private void caption(TextView v, float sp) {
@@ -235,7 +306,22 @@ final class TopBar {
             put(ampm, ra, ampmX, base);
             if (date.getVisibility() != View.GONE) put(date, rd, m, TopBarLayout.baselineY(centre, captionCap));
             int padEnd = Math.round(10 * d) + (right - clockX);
-            if (buttons.getPaddingRight() != padEnd) buttons.setPadding(0, buttons.getPaddingTop(), padEnd, buttons.getPaddingBottom());
+            if (buttons.getPaddingRight() != padEnd && pendingPad != padEnd) {
+                // place() often runs inside a layout pass (layout listeners), where a requestLayout() is dropped and the
+                // capsule keeps its old width. Apply the padding after this pass instead; rare (once per width change).
+                pendingPad = padEnd;
+                header.post(() -> {
+                    buttons.setPadding(0, buttons.getPaddingTop(), pendingPad, buttons.getPaddingBottom());
+                    buttons.requestLayout();
+                    header.postOnAnimation(settle);
+                });
+            }
+            int n = 0;
+            for (int i = 0; i < buttons.getChildCount() && n < btnW.length; i++) {
+                View b = buttons.getChildAt(i);
+                if (b.getVisibility() != View.GONE) btnW[n++] = b.getWidth();
+            }
+            expectedCapsule = TopBarLayout.capsuleWidth(right, java.util.Arrays.copyOf(btnW, n), clockW, ampmW, d);
         } else {
             int base = TopBarLayout.baselineY(centre, clockCap);
             int dateMax = TopBarLayout.dateMaxWidth(0, base, TopBarLayout.MAX_SCALE_X, d);
@@ -253,6 +339,7 @@ final class TopBar {
             fitScrim(row.end, base, greetingBase);
         }
         setTranslation(buttons, right - (layoutX(buttons) + buttons.getWidth()), centre - (layoutY(buttons) + buttons.getHeight() / 2f));
+        if (!revealed) checkReveal();
     }
 
     /** split: the corner scrim is stretched until the date and the greeting end inside its 4.5:1 zone (21.6). */

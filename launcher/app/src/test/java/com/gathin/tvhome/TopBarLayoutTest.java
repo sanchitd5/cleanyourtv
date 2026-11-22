@@ -3,6 +3,7 @@ package com.gathin.tvhome;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 /** The numbers of HOME-DESIGN.md section 21.10. */
@@ -90,5 +91,21 @@ public class TopBarLayoutTest {
         assertEquals("classic", TopBarLayout.mode("split", false, false, true));
         assertEquals("classic", TopBarLayout.mode("nonsense", false, false, false));
         assertEquals("tvos", TopBarLayout.mode("tvos", false, false, false));
+    }
+
+    @Test public void stableNeedsTwoEqualPassesOrTheTimeout() {
+        int[] a = {100, 40, 200, 90, 30, 180}, b = {100, 40, 220, 90, 30, 200};
+        assertFalse(TopBarLayout.stable(null, a, 10));
+        assertFalse(TopBarLayout.stable(a, b, 10));
+        assertTrue(TopBarLayout.stable(a, a.clone(), 10));
+        assertTrue(TopBarLayout.stable(null, a, TopBarLayout.SETTLE_TIMEOUT_MS));
+    }
+
+    @Test public void capsuleWidthFromTheTvProbe() {
+        // probe: clock ink 92 px, AM/PM ink 40 px, two 36 dp buttons, density 2
+        // 8 pad + 72 + 8 gap + 72 + 20 before clock + 92 + 8 + 40 + 32 end
+        assertEquals(352, TopBarLayout.capsuleWidth(1806, new int[]{72, 72}, 92, 40, 2f));
+        // without AM/PM: no 8 + 40
+        assertEquals(304, TopBarLayout.capsuleWidth(1806, new int[]{72, 72}, 92, 0, 2f));
     }
 }
