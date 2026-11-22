@@ -342,6 +342,31 @@ final class Config {
         return inputTiles && dockRow && !singleRow && !INPUT_GROUP_OFF.equals(inputGroup);
     }
 
+    // --- Top bar (HOME-DESIGN.md section 21): one contiguous block (T1). ---
+    /** Top bar layout: {@link #TOP_BAR_MODE_CLASSIC} (today's header), {@link #TOP_BAR_MODE_SPLIT} or {@link #TOP_BAR_MODE_TVOS} (theme top_bar_layout). */
+    final String topBarLayout;
+    /** With the tvos layout, the date shows in the top-left caption slot (theme top_bar_date). */
+    final boolean topBarDate;
+    static final String TOP_BAR_MODE_CLASSIC = "classic", TOP_BAR_MODE_SPLIT = "split", TOP_BAR_MODE_TVOS = "tvos";
+    /** On-TV choices (ints under these keys): layout 0 Classic, 1 Split, 2 Apple TV; date 1 On, 0 Off. Both are in {@link #HORIZON_KEYS}. */
+    static final String TOP_BAR_LAYOUT_KEY = "top_bar_layout", TOP_BAR_DATE_KEY = "top_bar_date";
+    static final int[] TOP_BAR_LAYOUT_CHOICES = {0, 1, 2};
+
+    /** A known top_bar_layout (any case, trimmed), or classic for anything else. */
+    static String topBarLayout(String value) {
+        if (value == null) return TOP_BAR_MODE_CLASSIC;
+        String v = value.trim();
+        if (TOP_BAR_MODE_SPLIT.equalsIgnoreCase(v)) return TOP_BAR_MODE_SPLIT;
+        return TOP_BAR_MODE_TVOS.equalsIgnoreCase(v) ? TOP_BAR_MODE_TVOS : TOP_BAR_MODE_CLASSIC;
+    }
+
+    /** The layout chosen on the TV (0, 1 or 2), or the theme's when none (-1) or anything else is saved. */
+    static String chosenTopBarLayout(int chosen, String theme) {
+        return chosen >= 0 && chosen < TOP_BAR_LAYOUT_CHOICES.length
+                ? new String[]{TOP_BAR_MODE_CLASSIC, TOP_BAR_MODE_SPLIT, TOP_BAR_MODE_TVOS}[chosen] : theme;
+    }
+    // --- end top bar ---
+
     /** input_group's three words (theme-only). */
     static final String INPUT_GROUP_OFF = "off", INPUT_GROUP_DIVIDER = "divider", INPUT_GROUP_SEPARATE = "separate";
     /**
@@ -411,7 +436,7 @@ final class Config {
             CLOCK_BLANK_AFTER_KEY, TOP_SHELF_KEY, TOP_SHELF_SCRIM_KEY, INPUT_TILES_KEY, INPUT_TILES_EMPTY_KEY,
             GREETING_MODE_KEY, FOCUS_PARALLAX_KEY, FOCUS_SHEEN_KEY, WALLPAPER_VIDEO_KEY, VIDEO_MINUTES_KEY,
             CAPTION_SECONDS_KEY, HOME_IDLE_SHIFT_KEY, REDUCED_MOTION_KEY, SCREENSAVER_PHOTOS_KEY,
-            REDUCE_TRANSPARENCY_KEY};
+            REDUCE_TRANSPARENCY_KEY, TOP_BAR_LAYOUT_KEY, TOP_BAR_DATE_KEY};
 
     /** A switch chosen on the TV: 1 is On, 0 is Off, anything else (absent is -1) leaves the theme's value. */
     static boolean chosenSwitch(int chosen, boolean theme) {
@@ -477,7 +502,8 @@ final class Config {
                    boolean topShelf, int topShelfScrim, int focusParallax, boolean focusSheen, boolean inputTiles, boolean inputTilesShowEmpty,
                    Map<String, String> inputLogos, boolean greetingOnce, int homeIdleCalmSeconds, int homeIdleDimSeconds, boolean homeIdleShift,
                    int wallpaperCaptionSeconds, int clockShiftSeconds, int clockDimAfterMinutes, int clockDimFloor, int clockBlankAfterMinutes,
-                   boolean glassSurfaces, boolean glassLiveBackdrop, boolean glassReduceTransparency, String inputGroup) {
+                   boolean glassSurfaces, boolean glassLiveBackdrop, boolean glassReduceTransparency, String inputGroup,
+                   String topBarLayout, boolean topBarDate) {
         this.handleViewInputs = handleViewInputs;
         this.tileMenu = tileMenu;
         this.inputKeycodes = inputKeycodes;
@@ -619,6 +645,8 @@ final class Config {
         this.glassLiveBackdrop = glassLiveBackdrop;
         this.glassReduceTransparency = glassReduceTransparency;
         this.inputGroup = inputGroup(inputGroup);
+        this.topBarLayout = topBarLayout(topBarLayout);
+        this.topBarDate = topBarDate;
         this.glowStyle = glowStyle(glowStyle);
         this.wallpaperCaptions = wallpaperCaptions;
         this.glassStyle = glassStyle(glassStyle);
@@ -777,6 +805,8 @@ final class Config {
         boolean glassLiveBackdrop = false;
         boolean glassReduceTransparency = false;
         String inputGroup = INPUT_GROUP_OFF;
+        String topBarLayout = TOP_BAR_MODE_CLASSIC;
+        boolean topBarDate = true;
         boolean applied = false;
 
         File dir = dir(ctx);
@@ -916,6 +946,8 @@ final class Config {
             glassLiveBackdrop = bool(json, "glass_live_backdrop", glassLiveBackdrop);
             glassReduceTransparency = bool(json, "glass_reduce_transparency", glassReduceTransparency);
             inputGroup = string(json, "input_group", inputGroup);
+            topBarLayout = string(json, "top_bar_layout", topBarLayout);
+            topBarDate = bool(json, "top_bar_date", topBarDate);
             glowStyle = string(json, "glow_style", glowStyle);
             glassStyle = string(json, "glass_style", glassStyle);
         }
@@ -947,6 +979,8 @@ final class Config {
         wallpaperCaptionSeconds = chosenTiming(choices.getInt(CAPTION_SECONDS_KEY, -1), wallpaperCaptionSeconds, 600);
         reducedMotion = chosenSwitch(choices.getInt(REDUCED_MOTION_KEY, -1), reducedMotion);
         glassReduceTransparency = chosenSwitch(choices.getInt(REDUCE_TRANSPARENCY_KEY, -1), glassReduceTransparency);
+        topBarLayout = chosenTopBarLayout(choices.getInt(TOP_BAR_LAYOUT_KEY, -1), topBarLayout);
+        topBarDate = chosenSwitch(choices.getInt(TOP_BAR_DATE_KEY, -1), topBarDate);
         int chosenRows = choices.getInt(ROWS_BELOW_DOCK_KEY, rowsBelow);
         if (chosenRows >= 0 && chosenRows <= 3) rowsBelow = chosenRows;
         animations = choices.getBoolean("animations", animations);
@@ -1011,7 +1045,8 @@ final class Config {
                 topShelf, topShelfScrim, focusParallax, focusSheen, inputTiles, inputTilesShowEmpty, packageMap(inputLogos), greetingOnce,
                 homeIdleCalmSeconds, homeIdleDimSeconds, homeIdleShift, wallpaperCaptionSeconds, clockShiftSeconds,
                 clockDimAfterMinutes, clockDimFloor, clockBlankAfterMinutes,
-                glassSurfaces, glassLiveBackdrop, glassReduceTransparency, inputGroup);
+                glassSurfaces, glassLiveBackdrop, glassReduceTransparency, inputGroup,
+                topBarLayout, topBarDate);
     }
 
     /**
