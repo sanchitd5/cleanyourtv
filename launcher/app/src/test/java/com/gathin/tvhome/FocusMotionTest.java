@@ -6,6 +6,7 @@ import org.junit.Test;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 public class FocusMotionTest {
@@ -73,5 +74,48 @@ public class FocusMotionTest {
         assertEquals(-1, FocusMotion.shelfDir(2, 3, true));
         assertEquals(1, FocusMotion.shelfDir(3, 2, true));
         assertEquals(0, FocusMotion.shelfDir(3, 3, true));
+    }
+
+    /** GridNavigation: in an RTL grid LEFT moves toward the end of the row, so the position grows. */
+    private static int nextPosition(int pos, int keyCode, boolean rtl) {
+        int toward = FocusMotion.dirX(keyCode);   // screen side
+        return rtl ? pos - toward : pos + toward;
+    }
+
+    @Test public void keyDirectionIsScreenSpaceInAnyLayout() {
+        assertEquals(1, FocusMotion.dirX(KeyEvent.KEYCODE_DPAD_RIGHT));
+        assertEquals(-1, FocusMotion.dirX(KeyEvent.KEYCODE_DPAD_LEFT));
+        assertEquals(0, FocusMotion.dirX(KeyEvent.KEYCODE_DPAD_UP));
+        assertEquals(1, FocusMotion.dirY(KeyEvent.KEYCODE_DPAD_DOWN));
+        assertEquals(-1, FocusMotion.dirY(KeyEvent.KEYCODE_DPAD_UP));
+        assertEquals(0, FocusMotion.dirY(KeyEvent.KEYCODE_DPAD_LEFT));
+        assertEquals(0, FocusMotion.dirX(KeyEvent.KEYCODE_ENTER));
+    }
+
+    @Test public void theShelfAndTheArtworkAgreeOnWhichSideFocusMovedToInBothLayouts() {
+        for (boolean rtl : new boolean[]{false, true}) {
+            for (int key : new int[]{KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT}) {
+                int next = nextPosition(3, key, rtl);
+                // shelfDir is "further along the row", mirrored for RTL: it is the screen side the new tile is on.
+                assertEquals("rtl=" + rtl + " key=" + key, FocusMotion.dirX(key), FocusMotion.shelfDir(3, next, rtl));
+            }
+        }
+    }
+
+    @Test public void theArtworkTrailsAgainstTheMoveOnScreen() {
+        // RIGHT in an RTL grid still moves focus to the right of the screen: the artwork starts to the left, as in LTR.
+        assertEquals(-8f, FocusMotion.parallaxX(FocusMotion.dirX(KeyEvent.KEYCODE_DPAD_RIGHT), 4f, 2f), 1e-4f);
+        assertEquals(8f, FocusMotion.parallaxX(FocusMotion.dirX(KeyEvent.KEYCODE_DPAD_LEFT), 4f, 2f), 1e-4f);
+        assertEquals(-4.8f, FocusMotion.parallaxY(1, 4f, 2f), 1e-4f);
+        assertEquals(0f, FocusMotion.parallaxY(0, 4f, 2f), 0f);
+        assertEquals(0f, FocusMotion.parallaxX(1, 0f, 2f), 0f);
+    }
+
+    @Test public void theKeyWindowIs300Ms() {
+        assertTrue(FocusMotion.recent(1000, 800));
+        assertTrue(FocusMotion.recent(1100, 800));
+        assertFalse(FocusMotion.recent(1101, 800));
+        assertFalse(FocusMotion.recent(1000, 0));
+        assertFalse(FocusMotion.recent(700, 800));
     }
 }
