@@ -1,11 +1,19 @@
 package com.gathin.tvhome;
 
 import android.graphics.Bitmap;
+import android.graphics.Rect;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.SystemClock;
+import android.view.PixelCopy;
 import android.view.SurfaceView;
 
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 /**
  * What a glass panel shows behind itself (HOME-DESIGN.md 19.4): a process-wide holder of one small pre-blurred copy of what
@@ -35,6 +43,12 @@ final class GlassBackdrop {
     private static volatile int generation;
     private static volatile boolean homeVisible;
     private static volatile boolean liveUnavailable;
+    /** glass_live_backdrop (with glass on): the kill switch. Off, only the still's copy is drawn and nothing is requested. */
+    private static volatile boolean liveEnabled;
+
+    static void setLiveEnabled(boolean enabled) {
+        liveEnabled = enabled;
+    }
 
     // ---- state: G2 fills it ----
 
@@ -50,8 +64,8 @@ final class GlassBackdrop {
 
     /** What a panel should draw: the live sample when there is one, else the still's copy, else null (a flat tint). */
     static Bitmap current() {
-        Bitmap l = live;
-        return l != null ? l : still;
+        Bitmap l = live, s = still;
+        return GlassSampling.select(liveEnabled, !liveUnavailable, l != null, s != null) == GlassSampling.LIVE ? l : s;
     }
 
     /** Moves whenever {@link #current()} may have changed; a drawable remembers it to know when to redraw. */
@@ -91,12 +105,98 @@ final class GlassBackdrop {
         publishLive(null);
     }
 
+    // Live sampling. requestLive and its callbacks run on the main thread; only the blur runs on the worker.
+    private static Handler mainHandler;   // lazy: the class is also loaded by plain JVM tests
+    private static ThreadPoolExecutor worker;
+    private static final int PIXELS = WIDTH * HEIGHT;
+    private static boolean inFlight;
+    private static long lastRequest = -1;
+    private static int failures;
+    /** PixelCopy's target, and the two published samples: one is written while the other is on show (samples are >= 1 s apart). */
+    private static Bitmap copyTarget, liveA, liveB;
+    private static int[] pixels, scratch;
+
     /**
-     * G2: ask for the clip's current frame. {@code crop} is {@link WallpaperSize#cropScale}'s result for the clip. Answers
-     * whether a request was made; G1's stub never makes one. The result arrives through {@link #publishLive}.
+     * Asks for the clip's current frame, read back with PixelCopy into 128x72 (cropped to what the screen shows). {@code crop}
+     * is {@link WallpaperSize#cropScale}'s result for the clip. Answers whether a request was made: false when live is off,
+     * given up, Home is not visible, the surface is not ready, one is already in flight, or the last was under a second ago.
+     * The result arrives through {@link #publishLive}; a failure or black frame is silent (the still is used) and, repeated,
+     * ends live sampling for the process. Call on the main thread.
      */
     static boolean requestLive(SurfaceView clip, float[] crop) {
-        return false;
+        if (clip == null || !liveEnabled || liveUnavailable || !homeVisible || inFlight) return false;
+        long now = SystemClock.uptimeMillis();
+        if (!GlassSampling.due(now, lastRequest, GlassSampling.MIN_GAP_MS)) return false;
+        try {
+            if (!clip.getHolder().getSurface().isValid()) return false;
+            Rect frame = clip.getHolder().getSurfaceFrame();
+            float[] f = WallpaperSize.sourceRect(crop);
+            Rect src = new Rect(Math.round(frame.width() * f[0]), Math.round(frame.height() * f[1]),
+                    Math.round(frame.width() * f[2]), Math.round(frame.height() * f[3]));
+            if (src.width() < 2 || src.height() < 2) return false;
+            if (copyTarget == null) {
+                copyTarget = Bitmap.createBitmap(WIDTH, HEIGHT, Bitmap.Config.ARGB_8888);
+                pixels = new int[PIXELS];
+                scratch = new int[PIXELS];
+            }
+            inFlight = true;
+            lastRequest = now;
+            PixelCopy.request(clip, src, copyTarget, result -> {
+                if (result == PixelCopy.SUCCESS) {
+                    worker().execute(GlassBackdrop::process);
+                } else {
+                    failed();
+                }
+            }, main());
+            return true;
+        } catch (Exception | OutOfMemoryError failure) {
+            inFlight = false;
+            failed();
+            return false;
+        }
+    }
+
+    private static Handler main() {
+        if (mainHandler == null) mainHandler = new Handler(Looper.getMainLooper());
+        return mainHandler;
+    }
+
+    private static ThreadPoolExecutor worker() {
+        if (worker == null) worker = new ThreadPoolExecutor(0, 1, 5, TimeUnit.SECONDS, new LinkedBlockingQueue<>());
+        return worker;
+    }
+
+    /** Worker thread: the copied frame to a blurred backdrop, unless it is black. */
+    private static void process() {
+        try {
+            copyTarget.getPixels(pixels, 0, WIDTH, 0, 0, WIDTH, HEIGHT);
+            if (GlassSampling.isBlack(pixels, PIXELS)) {
+                main().post(GlassBackdrop::failed);
+                return;
+            }
+            GlassBlur.soften(pixels, scratch, WIDTH, HEIGHT);
+            Bitmap shown = live;
+            Bitmap target = shown == liveA ? liveB : liveA;
+            if (target == null) target = Bitmap.createBitmap(WIDTH, HEIGHT, Bitmap.Config.ARGB_8888);
+            target.setPixels(pixels, 0, WIDTH, 0, 0, WIDTH, HEIGHT);
+            if (target != liveA && target != liveB) {
+                if (liveA == null) liveA = target; else liveB = target;
+            }
+            main().post(() -> {
+                failures = 0;
+                inFlight = false;
+            });
+            publishLive(target);
+        } catch (Exception | OutOfMemoryError failure) {
+            main().post(GlassBackdrop::failed);
+        }
+    }
+
+    /** Main thread: one sample failed or read black. */
+    private static void failed() {
+        inFlight = false;
+        failures++;
+        if (GlassSampling.giveUp(failures)) markLiveUnavailable();
     }
 
     /** Drops both copies and the unavailable mark (the wallpaper went, or memory pressure). Listeners are told. */
@@ -104,6 +204,7 @@ final class GlassBackdrop {
         still = null;
         live = null;
         liveUnavailable = false;
+        failures = 0;
         changed();
     }
 
