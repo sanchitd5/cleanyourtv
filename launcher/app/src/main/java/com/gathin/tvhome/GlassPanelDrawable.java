@@ -1,5 +1,6 @@
 package com.gathin.tvhome;
 
+import android.animation.ValueAnimator;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.ColorFilter;
@@ -42,12 +43,16 @@ final class GlassPanelDrawable extends Drawable implements GlassBackdrop.Listene
     private final int[] pixels = new int[GlassBackdrop.WIDTH * GlassBackdrop.HEIGHT];
     private Shader topBand, bottomBand, rim;
     private Bitmap backdrop;
+    private Bitmap fadeFrom;   // the backdrop being faded out, while a cross-fade runs
+    private boolean fadeAllowed;
+    private final ValueAnimator fader = ValueAnimator.ofFloat(0f, 1f);
     private float peak = 1f;
     private float bias;
     private boolean positioned;
     private float screenLeft, screenTop, screenW, screenH;
     private float bandTopBottom, bandBottomTop;
     private int seenGeneration = -1;
+    private int fadeAlpha = 255;
     private final Runnable refreshNow = () -> {
         if (seenGeneration == GlassBackdrop.generation()) return;
         refresh();
@@ -62,6 +67,14 @@ final class GlassPanelDrawable extends Drawable implements GlassBackdrop.Listene
         shadowPaint.setColor(GlassTint.INNER_SHADOW);
         rimPaint.setStyle(Paint.Style.STROKE);
         rimPaint.setStrokeWidth(GlassSurface.LINE_DP * density);
+        fader.setInterpolator(new android.view.animation.LinearInterpolator());
+        fader.addUpdateListener(a -> setCrossfade(a.getAnimatedFraction()));
+        fader.addListener(new android.animation.AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationEnd(android.animation.Animator animation) {
+                setCrossfade(1f);
+            }
+        });
         GlassBackdrop.addListener(this);   // weak: the view that holds this drawable keeps it alive
     }
 
@@ -98,6 +111,21 @@ final class GlassPanelDrawable extends Drawable implements GlassBackdrop.Listene
         invalidateSelf();
     }
 
+    /** Whether a new backdrop fades in (animations on, reduced motion off); off, it simply replaces the old one. */
+    void setFadeAllowed(boolean allowed) {
+        fadeAllowed = allowed;
+    }
+
+    /**
+     * How far the new backdrop has faded in over the old, 0 to 1 (19.7). 1 ends the fade and lets go of the old bitmap. Driven by
+     * the drawable's own animator, which follows the system animator scale; allocation-free.
+     */
+    void setCrossfade(float fraction) {
+        fadeAlpha = GlassMotion.fadeAlpha255(fraction);
+        if (fadeAlpha >= 255) fadeFrom = null;
+        invalidateSelf();
+    }
+
     int mode() {
         return mode;
     }
@@ -126,6 +154,19 @@ final class GlassPanelDrawable extends Drawable implements GlassBackdrop.Listene
         mode = GlassTint.mode(glassOn, reduceTransparency, homeHosted || GlassBackdrop.homeVisible());
         Bitmap b = mode == GlassTint.MODE_GLASS ? GlassBackdrop.current() : null;
         if (b != null && (b.getWidth() != GlassBackdrop.WIDTH || b.getHeight() != GlassBackdrop.HEIGHT)) b = null;
+        if (fadeAllowed && backdrop != null && b != null && b != backdrop && positioned) {
+            // A new picture or live sample arrives while one is on show: fade from the old (a copy of the reference, no pixels).
+            fader.cancel();
+            fadeFrom = backdrop;
+            fader.setDuration(GlassMotion.fadeMs(backdrop != GlassBackdrop.still()));
+            fadeAlpha = 0;
+            backdrop = b;
+            fader.start();
+        } else if (b != backdrop) {
+            fader.cancel();
+            fadeFrom = null;
+            fadeAlpha = 255;
+        }
         backdrop = b;
         float w = box.width(), h = box.height();
         peak = 1f;
@@ -180,7 +221,14 @@ final class GlassPanelDrawable extends Drawable implements GlassBackdrop.Listene
         float r = GlassSurface.fitRadius(radius, box.width(), box.height());
         int save = canvas.save();
         canvas.clipPath(clip);
-        if (backdrop != null) canvas.drawBitmap(backdrop, backdropMatrix, backdropPaint);
+        if (backdrop != null) {
+            if (fadeFrom != null && fadeAlpha < 255) {
+                backdropPaint.setAlpha(255);
+                canvas.drawBitmap(fadeFrom, backdropMatrix, backdropPaint);
+            }
+            backdropPaint.setAlpha(fadeAlpha);
+            canvas.drawBitmap(backdrop, backdropMatrix, backdropPaint);
+        }
         canvas.drawRect(box, tintPaint);
         if (topBand != null) {
             bandPaint.setShader(topBand);
