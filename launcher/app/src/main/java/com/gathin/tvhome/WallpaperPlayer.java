@@ -76,6 +76,22 @@ final class WallpaperPlayer implements MediaPlayer.OnInfoListener, MediaPlayer.O
     private String playing = "";
     private long since;
     private static boolean logged;
+    /** glass_surfaces without reduced transparency: a blurred copy of each picture is built for the panels (19.4). */
+    private final boolean glass;
+    /** glass_live_backdrop on top of that: the clip's frame is sampled for the panels. */
+    private final boolean glassLive;
+    /** The clip's {@link WallpaperSize#cropScale}, for the live sample's source rectangle. */
+    private float[] cropScale = {1f, 1f};
+    private boolean sampling;
+    private final Runnable resample = new Runnable() {
+        @Override public void run() {
+            sampling = false;
+            if (!active || closed || !videoShown) return;
+            sampleBackdrop();
+            sampling = true;
+            root.postDelayed(this, GlassSampling.MIN_GAP_MS);
+        }
+    };
     /** wallpaper_caption_seconds: the caption fades out this long after it appears; 0 keeps it for as long as its picture shows. */
     private final long captionMs;
     private final Runnable fadeCaption = new Runnable() {
@@ -93,6 +109,9 @@ final class WallpaperPlayer implements MediaPlayer.OnInfoListener, MediaPlayer.O
         // The dim is painted into the picture (decode), so no full-screen shade layer is drawn on every frame.
         dimColor = config.wallpaperDim > 0 ? (config.wallpaperDim * 255 / 100) << 24 : 0;
         videos = config.wallpaperVideos;
+        glass = config.glassSurfaces && !config.glassReduceTransparency;
+        glassLive = glass && config.glassLiveBackdrop && !config.wallpaperVideos.isEmpty();
+        GlassBackdrop.setLiveEnabled(glassLive);
         captionMs = config.wallpaperCaptionSeconds * 1000L;
         videoInterval = config.wallpaperVideoMinutes * 60_000L;
         order = config.wallpaperOrder;
@@ -188,6 +207,7 @@ final class WallpaperPlayer implements MediaPlayer.OnInfoListener, MediaPlayer.O
     /** Home is paused: the clip stops on its frame, and goes on from there if Home was only covered by a panel. */
     void stop() {
         active = false;
+        stopLiveSampling();
         if (caption != null && captionMs > 0) {
             caption.removeCallbacks(fadeCaption);
             caption.animate().cancel();
@@ -201,6 +221,8 @@ final class WallpaperPlayer implements MediaPlayer.OnInfoListener, MediaPlayer.O
      * then opens its clip again, from the start, under the picture.
      */
     void release() {
+        stopLiveSampling();
+        GlassBackdrop.clearLive();
         if (video == null) return;
         video.suspend();
         video.setVisibility(View.GONE);
@@ -275,6 +297,7 @@ final class WallpaperPlayer implements MediaPlayer.OnInfoListener, MediaPlayer.O
         float[] scale = WallpaperSize.cropScale(mp.getVideoWidth(), mp.getVideoHeight(), width, height);
         video.setScaleX(scale[0]);
         video.setScaleY(scale[1]);
+        cropScale = scale;
         videoShown = true;
         showCaption(true);
         image.animate().alpha(0f).setDuration(800).start();
@@ -291,12 +314,29 @@ final class WallpaperPlayer implements MediaPlayer.OnInfoListener, MediaPlayer.O
     /** Drops the wallpaper texture when Home is hidden and Android asks the process to free memory. */
     void releaseForMemoryPressure() {
         if (current == null) return;
+        GlassBackdrop.clear();
         image.setImageDrawable(null);
         // The renderer may still have a queued frame that references this hardware bitmap. Drop our references and
         // let Android reclaim its native buffer after rendering releases it instead of recycling it mid-frame.
         current = null;
         displayed = "";
         root.setBackgroundColor(backgroundColor);
+    }
+
+    /** One live sample of the clip's frame now (panel opened, Home pausing); a no-op unless glass_live_backdrop and a clip shows. */
+    void sampleBackdrop() {
+        if (glassLive && video != null && videoShown && !closed) GlassBackdrop.requestLive(video, cropScale);
+    }
+
+    /** A Home popup is open over the clip: one sample now, then one a second while the clip plays. Ends with {@link #stopLiveSampling}. */
+    void startLiveSampling() {
+        if (!glassLive || sampling || !active || closed || !videoShown) return;
+        resample.run();
+    }
+
+    void stopLiveSampling() {
+        sampling = false;
+        root.removeCallbacks(resample);
     }
 
     /** The pictures the rotation picks from now: wallpaper_moods' group for the time of day, or the whole collection. */
@@ -307,6 +347,7 @@ final class WallpaperPlayer implements MediaPlayer.OnInfoListener, MediaPlayer.O
     void close() {
         active = false;
         closed = true;
+        GlassBackdrop.clear();
         if (caption != null) caption.removeCallbacks(fadeCaption);
         release();
         decoder.shutdownNow();
@@ -464,11 +505,26 @@ final class WallpaperPlayer implements MediaPlayer.OnInfoListener, MediaPlayer.O
         }
     }
 
+    /** The first filtered step runs here (the picture is software only here); the blur and the publish go to the wallpaper thread. */
+    private void buildBackdrop(Bitmap picture) {
+        Bitmap mid = GlassStill.reduce(picture, width, height);
+        if (mid == null || closed) return;
+        try {
+            decoder.execute(() -> {
+                Bitmap blurred = GlassStill.soften(mid);
+                if (blurred != null && !closed) GlassBackdrop.publishStill(blurred);
+            });
+        } catch (RuntimeException rejected) {
+            mid.recycle();   // closed meanwhile
+        }
+    }
+
     private Bitmap decode(File file) {
         Bitmap decoded = decode(file, width, height, bitmapConfig, dimColor != 0);
         if (decoded == null) return null;
         try {
             if (dimColor != 0) new Canvas(decoded).drawColor(dimColor);
+            if (glass) buildBackdrop(decoded);
             // One copy in GPU memory instead of a software bitmap plus its texture; the decode stays off the UI
             // thread for rotations, and Home's return no longer uploads 4-8 MB to the GPU.
             Bitmap gpu = decoded.copy(Bitmap.Config.HARDWARE, false);

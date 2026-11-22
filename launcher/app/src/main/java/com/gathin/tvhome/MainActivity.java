@@ -1139,6 +1139,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         } else {
             registerReceiver(timeReceiver, timeFilter);
         }
+        GlassBackdrop.setHomeVisible(true);   // glass: Home is behind the panels, also while paused under the quick panel
         updateClockVisibility();
         clockRefresh.start();   // with timeReceiver: while Home is visible, paused or not
         tileRefresh.onStart();
@@ -1411,6 +1412,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             greeting.setAlpha(0f);
             greeting.setVisibility(View.INVISIBLE);
         }
+        wallpaperPlayer.sampleBackdrop();   // glass: the clip pauses on this frame, the quick panel over Home gets it
         wallpaperPlayer.stop();
         stopAmbientAnimation();
         hero.animate().cancel();
@@ -1439,6 +1441,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         handler.removeCallbacks(clockCheck);
         stopped = true;
         tileRefresh.onStop();
+        GlassBackdrop.setHomeVisible(false);
         wallpaperPlayer.release();
     }
 
