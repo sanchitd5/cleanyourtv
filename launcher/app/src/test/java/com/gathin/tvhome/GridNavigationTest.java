@@ -155,4 +155,35 @@ public class GridNavigationTest {
         assertEquals(0.45f, GridNavigation.idleAlpha(6, 4, false, -1, true), 0f);
         assertEquals(1f, GridNavigation.idleAlpha(6, 4, false, -1, false), 0f);
     }
+
+    @Test public void sameGroupSplitsAtTheInputCount() {
+        for (int n = 0; n <= 3; n++) {
+            for (int a = 0; a < 6; a++) {
+                for (int b = 0; b < 6; b++) {
+                    assertEquals("n=" + n + " " + a + "->" + b, (a < n) == (b < n), GridNavigation.sameGroup(a, b, n));
+                }
+            }
+        }
+        assertTrue(GridNavigation.sameGroup(1, 2, 0));          // no inputs: every move stays in the one group
+        assertFalse(GridNavigation.sameGroup(0, 1, 1));         // the input and the first app
+        assertFalse(GridNavigation.sameGroup(1, 0, 1));
+        assertTrue(GridNavigation.sameGroup(0, 2, 3));          // among three inputs
+        assertFalse(GridNavigation.sameGroup(2, 3, 3));
+    }
+
+    @Test public void groupOrderPutsInputsBeforeApps() {
+        assertEquals(-1, GridNavigation.groupOrder(true, false));
+        assertEquals(1, GridNavigation.groupOrder(false, true));
+        assertEquals(0, GridNavigation.groupOrder(true, true));
+        assertEquals(0, GridNavigation.groupOrder(false, false));
+    }
+
+    @Test public void appSlotStaysAmongTheAppPlaces() {
+        assertEquals(1, GridNavigation.appSlot(0, 1, 6));
+        assertEquals(2, GridNavigation.appSlot(2, 1, 6));
+        assertEquals(5, GridNavigation.appSlot(9, 1, 6));
+        assertEquals(0, GridNavigation.appSlot(0, 0, 6));
+        assertEquals(3, GridNavigation.appSlot(0, 3, 6));
+        assertEquals(4, GridNavigation.appSlot(7, 2, 5));
+    }
 }

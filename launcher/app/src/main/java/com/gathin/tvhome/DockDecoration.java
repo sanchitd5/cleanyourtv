@@ -75,6 +75,25 @@ public class DockDecoration extends RecyclerView.ItemDecoration {
         return Math.max(0f, Math.min(gap, roomPx));
     }
 
+    /** input_group: dp of extra room per side in divider mode, and the gap in separate mode (2 * 10 dp of band padding + 12 dp). */
+    static final float DIVIDER_INSET_DP = 8f, SEPARATE_GAP_DP = 32f;
+
+    /**
+     * input_group: how much narrower each cell beside the group boundary is made on its boundary side, in px. 0 for off (or
+     * anything unknown), 8 dp for divider, and for separate whatever lifts the gap between the last input tile and the first
+     * app from the gutter {@code gutterPx} to 32 dp. Never negative. The two cells together widen the gap by this much.
+     */
+    static float groupInsetPx(String mode, float gutterPx, float density) {
+        if (Config.INPUT_GROUP_DIVIDER.equals(mode)) return DIVIDER_INSET_DP * density;
+        if (Config.INPUT_GROUP_SEPARATE.equals(mode)) return Math.max(0f, SEPARATE_GAP_DP * density - gutterPx);
+        return 0f;
+    }
+
+    /** The x of the divider: the middle of the gap between the last input card and the first app card. */
+    static float dividerX(float lastInputRight, float firstAppLeft) {
+        return (lastInputRight + firstAppLeft) / 2f;
+    }
+
     @Override
     public void getItemOffsets(@NonNull Rect outRect, @NonNull View view, @NonNull RecyclerView parent,
                                @NonNull RecyclerView.State state) {

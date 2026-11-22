@@ -328,6 +328,46 @@ final class Config {
     /** Minutes into the clock screensaver before it fades to black; 0 is off ("Off"). A choice made on the TV wins (see {@link #CLOCK_BLANK_AFTER_KEY}). */
     final int clockBlankAfterMinutes;
 
+    // --- Glass surfaces (HOME-DESIGN.md section 19.10): theme-only keys, off until a theme sets them. ---
+    /** The launcher's own panels are drawn as glass instead of the opaque dark panel (theme glass_surfaces). */
+    final boolean glassSurfaces;
+    /** With glass_surfaces and wallpaper_video, the glass shows the clip's current frame (theme glass_live_backdrop). */
+    final boolean glassLiveBackdrop;
+    /** Panels are solid again; a choice made on the TV wins (see {@link #GLASS_REDUCE_TRANSPARENCY_KEY}). */
+    final boolean glassReduceTransparency;
+    /** How the dock sets input tiles apart: {@link #INPUT_GROUP_OFF}, {@link #INPUT_GROUP_DIVIDER} or {@link #INPUT_GROUP_SEPARATE} (theme input_group). */
+    final String inputGroup;
+    /** The dock splits its input tiles from its apps: needs input_tiles and dock_row, and is ignored with single_row. */
+    boolean inputGroupActive() {
+        return inputTiles && dockRow && !singleRow && !INPUT_GROUP_OFF.equals(inputGroup);
+    }
+
+    /** input_group's three words (theme-only). */
+    static final String INPUT_GROUP_OFF = "off", INPUT_GROUP_DIVIDER = "divider", INPUT_GROUP_SEPARATE = "separate";
+    /**
+     * On-TV "Reduce transparency" (On / Off / Follow theme): an int in launcher_settings, 1 on, 0 off, absent -1 = the
+     * theme decides. Like the Horizon choices it survives a theme push; {@link #clearGlassChoices} is the "Follow theme" half.
+     */
+    static final String GLASS_REDUCE_TRANSPARENCY_KEY = "glass_reduce_transparency";
+
+    /** A known input_group (any case, trimmed), or off for anything else. */
+    static String inputGroup(String value) {
+        if (value == null) return INPUT_GROUP_OFF;
+        String v = value.trim();
+        if (INPUT_GROUP_DIVIDER.equalsIgnoreCase(v)) return INPUT_GROUP_DIVIDER;
+        return INPUT_GROUP_SEPARATE.equalsIgnoreCase(v) ? INPUT_GROUP_SEPARATE : INPUT_GROUP_OFF;
+    }
+
+    /** Reduce transparency as chosen on the TV (1 on, 0 off), or the theme's when none (-1) or anything else is saved. */
+    static boolean chosenReduceTransparency(int chosen, boolean theme) {
+        return chosen == 1 ? true : chosen == 0 ? false : theme;
+    }
+
+    /** Forgets the glass choices made on the TV; call it beside {@link #clearHorizonChoices} for "Follow theme". Does not commit. */
+    static SharedPreferences.Editor clearGlassChoices(SharedPreferences.Editor editor) {
+        return editor.remove(GLASS_REDUCE_TRANSPARENCY_KEY);
+    }
+
     /*
      * On-TV overrides for Horizon (HOME-DESIGN.md section 16, decisions 1 and 6). They live in the same
      * launcher_settings preferences as the other Launcher settings rows, but unlike those they are NOT cleared
@@ -386,7 +426,8 @@ final class Config {
                    List<File> wallpaperVideos, int wallpaperVideoMinutes,
                    boolean topShelf, int topShelfScrim, int focusParallax, boolean focusSheen, boolean inputTiles, boolean inputTilesShowEmpty,
                    Map<String, String> inputLogos, boolean greetingOnce, int homeIdleCalmSeconds, int homeIdleDimSeconds, boolean homeIdleShift,
-                   int wallpaperCaptionSeconds, int clockShiftSeconds, int clockDimAfterMinutes, int clockDimFloor, int clockBlankAfterMinutes) {
+                   int wallpaperCaptionSeconds, int clockShiftSeconds, int clockDimAfterMinutes, int clockDimFloor, int clockBlankAfterMinutes,
+                   boolean glassSurfaces, boolean glassLiveBackdrop, boolean glassReduceTransparency, String inputGroup) {
         this.handleViewInputs = handleViewInputs;
         this.tileMenu = tileMenu;
         this.inputKeycodes = inputKeycodes;
@@ -524,6 +565,10 @@ final class Config {
         this.clockDimAfterMinutes = clockDimAfterMinutes;
         this.clockDimFloor = clockDimFloor;
         this.clockBlankAfterMinutes = clockBlankAfterMinutes;
+        this.glassSurfaces = glassSurfaces;
+        this.glassLiveBackdrop = glassLiveBackdrop;
+        this.glassReduceTransparency = glassReduceTransparency;
+        this.inputGroup = inputGroup(inputGroup);
         this.glowStyle = glowStyle(glowStyle);
         this.wallpaperCaptions = wallpaperCaptions;
         this.glassStyle = glassStyle(glassStyle);
@@ -678,6 +723,10 @@ final class Config {
         int clockDimAfterMinutes = 0;
         int clockDimFloor = 35;
         int clockBlankAfterMinutes = 0;
+        boolean glassSurfaces = false;
+        boolean glassLiveBackdrop = false;
+        boolean glassReduceTransparency = false;
+        String inputGroup = INPUT_GROUP_OFF;
         boolean applied = false;
 
         File dir = dir(ctx);
@@ -813,6 +862,10 @@ final class Config {
             clockDimAfterMinutes = integer(json, "clock_dim_after_minutes", clockDimAfterMinutes, 0, CLOCK_DIM_AFTER_MAX);
             clockDimFloor = integer(json, "clock_dim_floor", clockDimFloor, 10, 100);
             clockBlankAfterMinutes = integer(json, "clock_blank_after_minutes", clockBlankAfterMinutes, 0, CLOCK_BLANK_AFTER_MAX);
+            glassSurfaces = bool(json, "glass_surfaces", glassSurfaces);
+            glassLiveBackdrop = bool(json, "glass_live_backdrop", glassLiveBackdrop);
+            glassReduceTransparency = bool(json, "glass_reduce_transparency", glassReduceTransparency);
+            inputGroup = string(json, "input_group", inputGroup);
             glowStyle = string(json, "glow_style", glowStyle);
             glassStyle = string(json, "glass_style", glassStyle);
         }
@@ -831,6 +884,7 @@ final class Config {
         homeIdleDimSeconds = chosenTiming(choices.getInt(HOME_IDLE_DIM_KEY, -1), homeIdleDimSeconds, HOME_IDLE_DIM_MAX);
         clockDimAfterMinutes = chosenTiming(choices.getInt(CLOCK_DIM_AFTER_KEY, -1), clockDimAfterMinutes, CLOCK_DIM_AFTER_MAX);
         clockBlankAfterMinutes = chosenTiming(choices.getInt(CLOCK_BLANK_AFTER_KEY, -1), clockBlankAfterMinutes, CLOCK_BLANK_AFTER_MAX);
+        glassReduceTransparency = chosenReduceTransparency(choices.getInt(GLASS_REDUCE_TRANSPARENCY_KEY, -1), glassReduceTransparency);
         int chosenRows = choices.getInt(ROWS_BELOW_DOCK_KEY, rowsBelow);
         if (chosenRows >= 0 && chosenRows <= 3) rowsBelow = chosenRows;
         animations = choices.getBoolean("animations", animations);
@@ -893,7 +947,8 @@ final class Config {
                 settingsKeyClearTask, quickPanel, quickPanelShortcuts, clockAerial, videos, videoMinutes,
                 topShelf, topShelfScrim, focusParallax, focusSheen, inputTiles, inputTilesShowEmpty, packageMap(inputLogos), greetingOnce,
                 homeIdleCalmSeconds, homeIdleDimSeconds, homeIdleShift, wallpaperCaptionSeconds, clockShiftSeconds,
-                clockDimAfterMinutes, clockDimFloor, clockBlankAfterMinutes);
+                clockDimAfterMinutes, clockDimFloor, clockBlankAfterMinutes,
+                glassSurfaces, glassLiveBackdrop, glassReduceTransparency, inputGroup);
     }
 
     /**

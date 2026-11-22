@@ -60,6 +60,7 @@ ENUMS = {
     "glow_style": ("Config.java", "GLOW_", "trimmed"),
     "glass_style": ("Config.java", "GLASS_", "trimmed"),
     "wallpaper_order": ("WallpaperRotation.java", "ORDER_", "exact"),
+    "input_group": ("Config.java", "INPUT_GROUP_", "trimmed"),
 }
 CONSTANT = r"\b{prefix}([A-Z_]+)\s*=\s*\"([a-z-]+)\""
 
