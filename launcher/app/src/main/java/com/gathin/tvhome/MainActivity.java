@@ -1439,7 +1439,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         // Nothing of ours stays on screen over another app; an undecided prompt simply returns next time.
         if (cardPrompt != null) cardPrompt.dismiss();
         if (appLibrary != null) appLibrary.close();
-        if (openPopup != null) openPopup.dismiss();
+        GlassPopup.now(openPopup);   // glass motion: no exit animation while Home leaves
     }
 
     @Override
@@ -1913,7 +1913,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     @Override
     public void onLibraryRequested() {
         if (appLibrary != null) appLibrary.close();
-        if (openPopup != null) openPopup.dismiss();
+        GlassPopup.now(openPopup);   // glass motion: no exit animation while Home leaves
         libraryFocusPending = false;
         libraryFromTopBar = false;
         libraryFromVpnPill = false;
@@ -3816,7 +3816,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     }
 
     private PopupWindow glassPopup(View panel, int width) {
-        final PopupWindow popup = new PopupWindow(panel, width, ViewGroup.LayoutParams.WRAP_CONTENT, true);
+        final GlassPopup popup = new GlassPopup(panel, width, ViewGroup.LayoutParams.WRAP_CONTENT, true);   // glass motion: Back fades out
         popup.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));   // needed for Back to dismiss
         popup.setOutsideTouchable(true);
         popup.setAnimationStyle(0);
@@ -3826,13 +3826,26 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             if (Glass.on() && wallpaperPlayer != null) wallpaperPlayer.stopLiveSampling();   // glass:
         });
         openPopup = popup;
-        if (Glass.apply(panel, GlassSurface.POPUP_RADIUS_DP, true) && wallpaperPlayer != null) wallpaperPlayer.startLiveSampling();   // glass: one sample now, then 1 Hz
+        if (Glass.apply(panel, GlassSurface.POPUP_RADIUS_DP, true)) {
+            popup.setMotion(new GlassMotionController(panel, Glass.animations(), Glass.reducedMotion()));   // glass motion:
+            if (wallpaperPlayer != null) wallpaperPlayer.startLiveSampling();   // glass: one sample now, then 1 Hz
+        }
         return popup;
     }
 
     /** Drop in: fade and unfold from the top edge, hanging under the anchor pill. */
     private void dropIn(PopupWindow popup, View panel, View anchor, int gravity) {
         if (panel instanceof ViewGroup) Glass.rows((ViewGroup) panel);
+        // glass motion: spring open from the corner nearest the anchor, row focus scale and highlight parallax (GlassMotionController)
+        final GlassMotionController gm = popup instanceof GlassPopup ? ((GlassPopup) popup).motion() : null;
+        if (gm != null && panel instanceof ViewGroup) {
+            int abs = Gravity.getAbsoluteGravity(gravity, panel.getLayoutDirection()) & Gravity.HORIZONTAL_GRAVITY_MASK;
+            gm.watch((ViewGroup) panel, false);
+            gm.prepareOpen(abs == Gravity.RIGHT ? 1f : 0f, 0f);
+            popup.showAsDropDown(anchor, 0, (int) (10 * density), gravity);
+            gm.runOpen();
+            return;
+        }
         panel.setAlpha(0f);
         panel.setPivotY(0f);
         panel.setScaleY(0.92f);
@@ -3871,7 +3884,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             dot.setVisibility(View.GONE);
         }
         row.setOnClickListener(v -> {
-            popup.dismiss();
+            GlassPopup.now(popup);   // glass motion: a chosen row closes at once
             action.run();
         });
         rows.addView(row);
@@ -4092,7 +4105,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         row.findViewById(R.id.status).setVisibility(View.GONE);
         ((TextView) row.findViewById(R.id.title)).setText(title);
         row.setOnClickListener(v -> {
-            popup.dismiss();
+            GlassPopup.now(popup);   // glass motion: a chosen row closes at once
             action.run();
         });
         // The OK-up after opening the menu must not activate its first row.
@@ -4106,7 +4119,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             boolean activate = pressed[0];
             pressed[0] = false;
             if (activate) {
-                popup.dismiss();
+                GlassPopup.now(popup);   // glass motion: a chosen row closes at once
                 action.run();
             }
             return true;
@@ -4199,7 +4212,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         keep.setOnKeyListener(keys);
         show.setOnKeyListener(keys);
         cardPrompt = dialog;
+        final GlassMotionController gm = Glass.on() ? new GlassMotionController(panel, Glass.animations(), Glass.reducedMotion()) : null;   // glass motion:
+        if (gm != null) {
+            gm.watch((ViewGroup) panel, false);
+            gm.prepareOpen(0.5f, 0.5f);
+        }
         dialog.show();
+        if (gm != null) gm.runOpen();
         keep.requestFocus();
     }
 

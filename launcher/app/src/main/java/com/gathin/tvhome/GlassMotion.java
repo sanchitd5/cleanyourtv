@@ -44,4 +44,39 @@ final class GlassMotion {
         if (!(panelHeight > 0f)) return 0f;
         return Math.max(-1f, Math.min(1f, 2f * rowCentre / panelHeight - 1f));
     }
+
+    /** How a panel moves: nothing (snap), alpha only (reduced_motion) or the full springs (19.7). */
+    static final int STYLE_SNAP = 0, STYLE_ALPHA = 1, STYLE_FULL = 2;
+
+    /**
+     * Animators off (developer options scale 0) or the {@code animations} key off: snap. {@code reduced_motion}: alpha only at
+     * {@link Motion#REDUCED_MS}, no scale, no parallax. Otherwise the full motion.
+     */
+    static int style(boolean animatorsEnabled, boolean animations, boolean reducedMotion) {
+        if (!animatorsEnabled || !animations) return STYLE_SNAP;
+        return reducedMotion ? STYLE_ALPHA : STYLE_FULL;
+    }
+
+    /** Cross-fade length: the first live sample replaces the still's copy in 200 ms, a later resample takes 300 ms. */
+    static int fadeMs(boolean previousWasLive) {
+        return previousWasLive ? FADE_RESAMPLE_MS : FADE_FIRST_MS;
+    }
+
+    /** The cross-fade fraction after {@code elapsedMs} of {@code durationMs}, linear, held to 0..1 (a zero duration is done). */
+    static float fadeFraction(long elapsedMs, int durationMs) {
+        if (durationMs <= 0) return 1f;
+        return Math.max(0f, Math.min(1f, elapsedMs / (float) durationMs));
+    }
+
+    /** The new backdrop's paint alpha (0 to 255) at a cross-fade fraction; a NaN counts as finished. */
+    static int fadeAlpha255(float fraction) {
+        if (fraction != fraction) return 255;
+        return Math.round(Math.max(0f, Math.min(1f, fraction)) * 255f);
+    }
+
+    /** The scale a row or chip rests at, is focused at, or is pressed to. */
+    static float rowScale(boolean focused, boolean chip, boolean pressed) {
+        if (!focused) return 1f;
+        return pressed ? ROW_PRESS_SCALE : chip ? CHIP_FOCUS_SCALE : ROW_FOCUS_SCALE;
+    }
 }

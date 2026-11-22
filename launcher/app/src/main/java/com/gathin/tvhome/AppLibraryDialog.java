@@ -86,7 +86,7 @@ final class AppLibraryDialog {
     private final boolean rtl;
     private TextView instructions;
     private int totalApps;
-    final PopupWindow popup;
+    final GlassPopup popup;   // glass motion: Back fades out
     private final float density;
     private List<ResolveInfo> apps = new ArrayList<>();
     private String selectedPackage;
@@ -96,6 +96,7 @@ final class AppLibraryDialog {
     private final Map<String, String> labels = new HashMap<>();
     private long catalogTime;
     private PopupWindow actionPopup;
+    private GlassMotionController motion;   // glass motion: the library panel's; null without glass
     private RecyclerView catalog;
     private FrameLayout shelf;
     private GlassView highlight;
@@ -168,7 +169,11 @@ final class AppLibraryDialog {
         catalogWidth = Math.min(dp(800), Math.max(dp(200), decor.getWidth() - dp(64)));
         int width = catalogWidth;
         int height = dp(280);
-        popup = new PopupWindow(panel, width, height, true);
+        popup = new GlassPopup(panel, width, height, true);
+        if (Glass.on()) {   // glass motion:
+            motion = new GlassMotionController(panel, animations, reducedMotion);
+            popup.setMotion(motion);
+        }
         popup.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
         popup.setOutsideTouchable(true);
         popup.setAnimationStyle(0);
@@ -184,7 +189,7 @@ final class AppLibraryDialog {
     void close() {
         dismissActions();
         if (popup.isShowing()) {
-            popup.dismiss();
+            popup.dismissNow();   // glass motion: close() is a programmatic or chosen-row close
         } else if (!closed) {
             closed = true;   // still loading: it never shows
             dismissed.run();
@@ -196,6 +201,7 @@ final class AppLibraryDialog {
     }
 
     private void reveal() {
+        if (motion != null) motion.prepareOpen(0.5f, 0.5f);   // glass motion:
         popup.showAtLocation(activity.getWindow().getDecorView(), Gravity.CENTER, 0, 0);
         View container = panel.getRootView();
         if (container.getLayoutParams() instanceof WindowManager.LayoutParams) {
@@ -203,6 +209,10 @@ final class AppLibraryDialog {
             params.flags |= WindowManager.LayoutParams.FLAG_DIM_BEHIND;
             params.dimAmount = 0.55f;
             activity.getWindowManager().updateViewLayout(container, params);
+        }
+        if (motion != null) {   // glass motion:
+            motion.runOpen();
+            return;
         }
         panel.setAlpha(0f);
         panel.animate().alpha(1f).setDuration(reducedMotion ? Motion.REDUCED_MS : 180).start();
@@ -437,7 +447,7 @@ final class AppLibraryDialog {
     private void dismissActions() {
         PopupWindow menu = actionPopup;
         actionPopup = null;
-        if (menu != null) menu.dismiss();
+        GlassPopup.now(menu);   // glass motion: dismissActions is a chosen row or a close, so it goes at once
     }
 
     private void restoreCardFocus() {
@@ -526,7 +536,9 @@ final class AppLibraryDialog {
         View menuPanel = activity.getLayoutInflater().inflate(R.layout.popup_inputs, panel, false);
         LinearLayout rows = menuPanel.findViewById(R.id.rows);
         Glass.apply(menuPanel, GlassSurface.POPUP_RADIUS_DP, true);
-        PopupWindow menu = new PopupWindow(menuPanel, dp(220), ViewGroup.LayoutParams.WRAP_CONTENT, true);
+        GlassPopup menu = new GlassPopup(menuPanel, dp(220), ViewGroup.LayoutParams.WRAP_CONTENT, true);
+        final GlassMotionController menuMotion = Glass.on() ? new GlassMotionController(menuPanel, animations, reducedMotion) : null;   // glass motion:
+        menu.setMotion(menuMotion);
         actionPopup = menu;
         menu.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
         menu.setOutsideTouchable(true);
@@ -567,6 +579,14 @@ final class AppLibraryDialog {
                 panelLocation[0] + panel.getWidth(), panelLocation[1] + panel.getHeight());
         int x = Math.max(screen.left + dp(12), Math.min(location[0] + anchor.getWidth() - dp(12), screen.right - menuWidth - dp(12)));
         int y = Math.max(screen.top + dp(12), Math.min(location[1] + dp(8), screen.bottom - menuPanel.getMeasuredHeight() - dp(12)));
+        if (menuMotion != null) {   // glass motion: spring open from the card's side, row focus scale, highlight parallax
+            menuMotion.watch((ViewGroup) menuPanel, false);
+            menuMotion.prepareOpen(rtl ? 1f : 0f, 0f);
+            menu.showAtLocation(activity.getWindow().getDecorView(), Gravity.TOP | Gravity.START, x, y);
+            menuMotion.runOpen();
+            rows.getChildAt(0).requestFocus();
+            return;
+        }
         menuPanel.setAlpha(0f);
         menuPanel.setPivotY(0f);
         menuPanel.setScaleY(0.92f);
