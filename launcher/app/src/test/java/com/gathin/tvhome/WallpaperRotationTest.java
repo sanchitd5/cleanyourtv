@@ -130,6 +130,62 @@ public class WallpaperRotationTest {
         assertTrue(WallpaperRotation.due(20 * minute, 10 * minute, 5 * minute));   // clock went back
     }
 
+    @Test
+    public void videosKeepsClipsOnlySortedByName() throws IOException {
+        File dir = Files.createTempDirectory("walls").toFile();
+        touch(dir, "02-night.MP4", 10);
+        touch(dir, "01-aurora.mp4", 10);
+        touch(dir, "03-still.jpg", 10);
+        touch(dir, "captions.txt", 10);
+        touch(dir, "empty.mp4", 0);
+        touch(dir, "clip.mp4.part", 10);
+        new File(dir, "folder.mp4").mkdir();
+        assertEquals(Arrays.asList("01-aurora.mp4", "02-night.MP4"), names(WallpaperRotation.videos(dir)));
+        // The pictures of the same folder are the collection it always was: a clip is not one of them.
+        assertEquals(Collections.singletonList("03-still.jpg"), names(WallpaperRotation.images(dir)));
+        assertTrue(WallpaperRotation.videos(null).isEmpty());
+        assertTrue(WallpaperRotation.videos(new File(dir, "missing")).isEmpty());
+    }
+
+    @Test
+    public void aClipHasNoSizeLimitButTheCollectionHasACount() throws IOException {
+        File dir = Files.createTempDirectory("walls").toFile();
+        touch(dir, "big.mp4", 11 * 1024 * 1024);   // over the 10 MB a picture may be
+        touch(dir, "big.jpg", 11 * 1024 * 1024);
+        assertEquals(Collections.singletonList("big.mp4"), names(WallpaperRotation.videos(dir)));
+        assertTrue(WallpaperRotation.images(dir).isEmpty());
+        for (int i = 0; i < 105; i++) touch(dir, String.format("clip-%03d.mp4", i), 1);
+        assertEquals(100, WallpaperRotation.videos(dir).size());
+    }
+
+    @Test
+    public void clipsRotateInTheOrderThePicturesDo() throws IOException {
+        File dir = Files.createTempDirectory("walls").toFile();
+        touch(dir, "03-ocean.mp4", 1);
+        touch(dir, "01-aurora.mp4", 1);
+        touch(dir, "02-night.mp4", 1);
+        List<File> clips = WallpaperRotation.videos(dir);
+        Random random = new Random(1);
+        String order = WallpaperRotation.ORDER_SEQUENTIAL;
+        assertEquals("01-aurora.mp4", WallpaperRotation.pick(clips, "", order, random).getName());
+        assertEquals("02-night.mp4", WallpaperRotation.pick(clips, "01-aurora.mp4", order, random).getName());
+        assertEquals("01-aurora.mp4", WallpaperRotation.pick(clips, "03-ocean.mp4", order, random).getName());
+        // The clip Home left on is the one it comes back to, until the interval has passed.
+        assertEquals("02-night.mp4", WallpaperRotation.find(clips, "02-night.mp4").getName());
+        assertNull(WallpaperRotation.find(clips, "gone.mp4"));
+    }
+
+    @Test
+    public void onlyAndroidsOwnDecodersAreSoftware() {
+        assertTrue(WallpaperRotation.softwareCodec("c2.android.avc.decoder"));
+        assertTrue(WallpaperRotation.softwareCodec("OMX.google.h264.decoder"));
+        assertFalse(WallpaperRotation.softwareCodec("OMX.MTK.VIDEO.DECODER.AVC"));
+        assertFalse(WallpaperRotation.softwareCodec("c2.mtk.avc.decoder"));
+        // A player that does not say which decoder it took is left to play.
+        assertFalse(WallpaperRotation.softwareCodec(null));
+        assertFalse(WallpaperRotation.softwareCodec(""));
+    }
+
     private static List<String> names(List<File> files) {
         String[] out = new String[files.size()];
         for (int i = 0; i < out.length; i++) out[i] = files.get(i).getName();

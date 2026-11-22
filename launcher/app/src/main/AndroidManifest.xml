@@ -65,6 +65,8 @@
         <package android:name="com.xiaomi.mitv.settings" />
         <package android:name="com.tcl.settings" />
         <package android:name="com.amazon.tv.launcher" />
+        <!-- MediaTek Google TV: the Picture, Sound, Screen mode and Audio output screens a quick_panel tile opens. -->
+        <package android:name="com.mediatek.tv.settings" />
         <!-- Coocaa OS sources for the Inputs menu (coocaa_sources); see CoocaaSources. -->
         <provider android:authorities="com.skyworth.tv.provider" />
         <provider android:authorities="com.skyworth.tv.sdk.provider" />
@@ -139,6 +141,25 @@
             android:excludeFromRecents="true"
             android:noHistory="true"
             android:theme="@android:style/Theme.Translucent.NoTitleBar.Fullscreen" />
+        <!-- quick_panel_shortcuts: the same panel as the system's notification panel, which is what SystemUI opens for
+             a remote's panel button (the gear on Google TV remotes, through the vendor's global key) and what the
+             stock launcher answered until it was disabled. Over whatever is on screen, an HDMI input included.
+             Disabled here and switched on by MainActivity only while the key is on, as InputsRequestActivity is.
+             SystemUI starts a handler only if it requires STATUS_BAR_SERVICE of its callers; the launcher itself
+             neither holds nor needs that permission. The system's "close" is a broadcast, not an activity, and is
+             not answered: the panel closes itself on Back and whenever anything else takes the screen. -->
+        <activity-alias
+            android:name=".QuickPanel"
+            android:targetActivity=".QuickSettingsActivity"
+            android:exported="true"
+            android:enabled="false"
+            android:permission="android.permission.STATUS_BAR_SERVICE">
+            <intent-filter>
+                <action android:name="android.app.action.TOGGLE_NOTIFICATION_HANDLER_PANEL" />
+                <action android:name="android.app.action.OPEN_NOTIFICATION_HANDLER_PANEL" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity-alias>
         <activity
             android:name=".HomeSettingsActivity"
             android:exported="false"

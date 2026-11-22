@@ -22,6 +22,29 @@ public class WallpaperSizeTest {
         assertFalse(WallpaperSize.accepted(0, 1080));
     }
 
+    @Test public void aClipOfTheScreensShapeIsNotScaled() {
+        assertArrayEquals(new float[]{1f, 1f}, WallpaperSize.cropScale(1920, 1080, 1920, 1080), 0.0001f);
+        assertArrayEquals(new float[]{1f, 1f}, WallpaperSize.cropScale(1280, 720, 1920, 1080), 0.0001f);
+    }
+
+    @Test public void aWiderClipIsCutAtTheSides() {
+        // 4096x2160 on 1920x1080: the height fills, and the width hangs over by 4096/3840.
+        float[] scale = WallpaperSize.cropScale(4096, 2160, 1920, 1080);
+        assertEquals(4096f / 3840f, scale[0], 0.0001f);
+        assertEquals(1f, scale[1], 0.0001f);
+    }
+
+    @Test public void aTallerClipIsCutTopAndBottom() {
+        float[] scale = WallpaperSize.cropScale(1620, 1080, 1920, 1080);
+        assertEquals(1f, scale[0], 0.0001f);
+        assertEquals((16f / 9f) / 1.5f, scale[1], 0.0001f);
+    }
+
+    @Test public void anUnknownSizeLeavesTheClipAlone() {
+        assertArrayEquals(new float[]{1f, 1f}, WallpaperSize.cropScale(0, 0, 1920, 1080), 0.0001f);
+        assertArrayEquals(new float[]{1f, 1f}, WallpaperSize.cropScale(1920, 1080, 0, 0), 0.0001f);
+    }
+
     @Test public void fourKOn1080pSamplesByTwo() {
         assertEquals(2, WallpaperSize.sampleSize(3840, 2160, 1920, 1080));
         assertNull(WallpaperSize.coverScale(1920, 1080, 1920, 1080));

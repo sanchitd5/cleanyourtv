@@ -29,6 +29,31 @@ public class ThemeFilesTest {
         assertFalse(ThemeFiles.collectionImage("captions.txt"));
     }
 
+    @Test public void theCollectionsClipsAreAllowed() {
+        assertEquals("wallpapers/01-aurora.mp4", ThemeFiles.path(Arrays.asList("wallpapers", "01-aurora.mp4")));
+        assertEquals("wallpapers/Night_2.MP4", ThemeFiles.path(Arrays.asList("wallpapers", "Night_2.MP4")));
+        assertNull(ThemeFiles.path(Collections.singletonList("clip.mp4")));
+        assertNull(ThemeFiles.path(Arrays.asList("wallpapers", ".mp4")));
+        assertNull(ThemeFiles.path(Arrays.asList("wallpapers", "a b.mp4")));
+        assertNull(ThemeFiles.path(Arrays.asList("wallpapers", "../clip.mp4")));
+        assertNull(ThemeFiles.path(Arrays.asList("wallpapers", "clip.mp4.sh")));
+        assertNull(ThemeFiles.path(Arrays.asList("wallpapers", "clip.mkv")));
+        assertNull(ThemeFiles.path(Arrays.asList("other", "clip.mp4")));
+    }
+
+    @Test public void aClipIsNotACollectionImage() {
+        // Clearing the collection's pictures must leave the clips where they are.
+        assertFalse(ThemeFiles.collectionImage("01-aurora.mp4"));
+        assertTrue(ThemeFiles.clip("01-aurora.mp4"));
+        assertTrue(ThemeFiles.clip("01-aurora.MP4"));
+        assertFalse(ThemeFiles.clip("01-aurora.jpg"));
+        assertFalse(ThemeFiles.clip(".mp4"));
+        assertFalse(ThemeFiles.clip("mp4"));
+        assertFalse(ThemeFiles.clip("01-aurora.mp4.part"));
+        assertFalse(ThemeFiles.clip("a b.mp4"));
+        assertFalse(ThemeFiles.clip(null));
+    }
+
     @Test public void anythingElseIsRefused() {
         assertNull(ThemeFiles.path(null));
         assertNull(ThemeFiles.path(Collections.emptyList()));

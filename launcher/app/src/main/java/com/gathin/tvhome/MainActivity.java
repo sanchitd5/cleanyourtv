@@ -257,6 +257,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private int[] settingsKeycodes = new int[0];
     private boolean settingsKeyPanel;
     private boolean settingsKeyClearTask;
+    /** A held Back and the Settings pill open the quick settings panel, with no key helper (a theme's quick_panel_shortcuts). */
+    private boolean quickPanelShortcuts;
     /** Calmer motion for weak GPUs (config.xml, reduced_motion): stiff spring, short fades, no replay. */
     private boolean reducedMotion;
     /** config.xml dock_row: the first row is a separate dock (band, parked low, top shelf) rather than plain grid. */
@@ -472,10 +474,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         // off the list (needs WRITE_SECURE_SETTINGS, granted by build-and-install with RESTORE_KEY_SERVICES=1).
         if (cfg.restoreKeyServices) ServiceRepair.restore(this);
         settingsRevision = settingsRevision();
-        applyViewInputsHandler(cfg.handleViewInputs);
+        applyHandler(InputsRequestActivity.class.getName(), cfg.handleViewInputs);
+        applyHandler("com.gathin.tvhome.QuickPanel", cfg.quickPanelShortcuts);
         settingsKeycodes = cfg.settingsKeycodes;
         settingsKeyPanel = cfg.settingsKeyPanel;
         settingsKeyClearTask = cfg.settingsKeyClearTask;
+        quickPanelShortcuts = cfg.quickPanelShortcuts;
         COLUMNS = cfg.columns;
         animations = cfg.animations;
         advancedEffects = cfg.animations && cfg.advancedEffects;
@@ -836,7 +840,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         btnSettings.setOnClickListener(v -> {
             if (launcherSettingsButton) startActivityForResult(
                     new Intent(this, LauncherSettingsActivity.class), LAUNCHER_SETTINGS_REQUEST);
-            else open(systemIntent(Settings.ACTION_SETTINGS));
+            else open(quickPanelShortcuts ? new Intent(this, QuickSettingsActivity.class) : systemIntent(Settings.ACTION_SETTINGS));
         });
         btnReorder = findViewById(R.id.btnReorder);
         btnReorder.setOnClickListener(v -> toggleReorder());
@@ -979,9 +983,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
      * handle_view_inputs: switch InputsRequestActivity, the VIEW_INPUTS handler, on or off. It is disabled in the
      * manifest, so a TV with its own input picker never sees it; only the sets that need it turn it on. Written
      * only when the state differs, so an ordinary start does not touch the package manager.
+     * quick_panel_shortcuts does the same for QuickPanel, the notification panel the system asks for.
      */
-    private void applyViewInputsHandler(boolean on) {
-        ComponentName handler = new ComponentName(this, InputsRequestActivity.class);
+    private void applyHandler(String name, boolean on) {
+        ComponentName handler = new ComponentName(this, name);
         PackageManager pm = getPackageManager();
         int want = on ? PackageManager.COMPONENT_ENABLED_STATE_ENABLED : PackageManager.COMPONENT_ENABLED_STATE_DEFAULT;
         if (pm.getComponentEnabledSetting(handler) != want) {
@@ -1341,6 +1346,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         handler.removeCallbacks(clockCheck);
         stopped = true;
         tileRefresh.onStop();
+        wallpaperPlayer.release();
     }
 
     /**
@@ -1779,6 +1785,19 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     public void onBackPressed() {
         // Home screen: Back goes nowhere, unless back_opens_clock is on.
         if (backOpensClock) startActivity(new Intent(this, ClockActivity.class));
+    }
+
+    /**
+     * quick_panel_shortcuts: Back held on Home opens the quick settings panel, the way tvOS opens its Control Center
+     * from a held button. Android then marks the release as cancelled, so it is not also a Back press. This is
+     * the long press the system reports from the key's own repeat, so it needs no key helper - and never comes
+     * on firmware where a helper that filters keys stops held keys repeating.
+     */
+    @Override
+    public boolean onKeyLongPress(int keyCode, KeyEvent event) {
+        if (!quickPanelShortcuts || keyCode != KeyEvent.KEYCODE_BACK) return super.onKeyLongPress(keyCode, event);
+        open(new Intent(this, QuickSettingsActivity.class));
+        return true;
     }
 
     // ---- glass highlight -------------------------------------------------------------------------

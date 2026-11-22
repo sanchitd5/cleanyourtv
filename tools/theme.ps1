@@ -117,10 +117,14 @@ function Drop($name) { "rm -f $dir/$name 2>/dev/null; content delete --uri $uri/
 # pictures is read back from it, so a reset that left the pictures behind still shows the theme it just removed.
 # Both paths use this one string (the same one theme.sh has).
 $clearWallpapers = "rm -f $dir/wallpapers/*.[jJ][pP][gG] $dir/wallpapers/*.[jJ][pP][eE][gG] $dir/wallpapers/*.[pP][nN][gG] $dir/wallpapers/*.[wW][eE][bB][pP] 2>/dev/null; content delete --uri $uri/wallpapers 2>/dev/null"
+# wallpaper_video's clips (wallpapers/*.mp4) are not in that string, as in theme.sh: a clip is tens of megabytes,
+# so a push leaves the ones the theme still has, at the same size, where they are. This removes the others - the
+# names in $keep stay, so all of them for an empty $keep, which is what -Reset and a theme without clips ask for.
+function DropClips($keep) { "for f in $dir/wallpapers/*.[mM][pP]4; do [ -e `"`$f`" ] || continue; case `" $keep `" in *`" `${f##*/} `"*) ;; *) rm -f `"`$f`" 2>/dev/null; content delete --uri $uri/wallpapers/`${f##*/} 2>/dev/null ;; esac; done" }
 
 if ($Reset) {
     $checkPut = $true
-    Invoke-Tv tv.py "mkdir -p $dir 2>/dev/null; $(Drop 'config.json'); $(Drop 'wallpaper.jpg'); $(Drop 'wallpapers/captions.txt'); $clearWallpapers; printf '%s' '$revision' > $tmp-theme_revision; $(Put 'theme_revision')" | Out-Null
+    Invoke-Tv tv.py "mkdir -p $dir 2>/dev/null; $(Drop 'config.json'); $(Drop 'wallpaper.jpg'); $(Drop 'wallpapers/captions.txt'); $clearWallpapers; $(DropClips ''); printf '%s' '$revision' > $tmp-theme_revision; $(Put 'theme_revision')" | Out-Null
     & $py -I theme_restart.py
     if ($LASTEXITCODE) { throw 'Home restart recovery failed' }
     Write-Host 'reset'
@@ -149,10 +153,13 @@ if ($themeJson -isnot [System.Management.Automation.PSCustomObject]) {
 # Every collection name is checked before anything changes on the TV, as in theme.sh: a name refused halfway
 # through the push left the new config.json and part of the collection behind. b64push.py refuses '..' in a path.
 $wallpapers = Join-Path $Theme 'wallpapers'
+# $clips are wallpaper_video's (*.mp4), named by the same rule and sent last.
 $images = @()
+$clips = @()
 if (Test-Path -LiteralPath $wallpapers -PathType Container) {
     $images = @(Get-ChildItem -LiteralPath $wallpapers -File | Where-Object { $_.Extension -match '^\.(jpg|jpeg|png|webp)$' })
-    foreach ($image in $images) {
+    $clips = @(Get-ChildItem -LiteralPath $wallpapers -File | Where-Object { $_.Extension -match '^\.mp4$' })
+    foreach ($image in @($images + $clips)) {
         if ($image.Name -notmatch '^[A-Za-z0-9_.-]+$' -or $image.Name.Contains('..')) {
             [Console]::Error.WriteLine("unsupported wallpaper filename: $($image.Name) (b64push.py takes letters, digits, '.', '_' and '-', with no '..' in the name). Nothing was sent to the TV.")
             exit 2
@@ -179,6 +186,17 @@ if (Test-Path -LiteralPath $captions -PathType Leaf) {
     Invoke-Tv tv.py (Put 'wallpapers/captions.txt') | Out-Null
 } else {
     Invoke-Tv tv.py (Drop 'wallpapers/captions.txt') | Out-Null
+}
+# wallpaper_video's clips, after everything a theme needs to look right without them, as in theme.sh: one the TV
+# already has at the same size is left alone, so only a first push, or a clip that changed, takes the minutes
+# b64push.py needs for it. With TV_ADB_BINARY set, adb's own push (tv.py --push) sends the clip instead.
+Invoke-Tv tv.py (DropClips (@($clips | ForEach-Object { $_.Name }) -join ' ')) | Out-Null
+foreach ($clip in $clips) {
+    $name = "wallpapers/$($clip.Name)"
+    $onTv = (@(Invoke-Tv tv.py "{ [ -e $dir/$name ] && wc -c < $dir/$name; } 2>/dev/null || content read --uri $uri/$name 2>/dev/null | wc -c") -join '').Trim()
+    if ($onTv -eq "$($clip.Length)") { Write-Host "$name is already on the TV"; continue }
+    if ($env:TV_ADB_BINARY) { Invoke-Tv tv.py --push $clip.FullName (Stage $name) | Out-Null } else { Invoke-Tv b64push.py $clip.FullName (Stage $name) }
+    Invoke-Tv tv.py (Put $name) | Out-Null
 }
 Invoke-Tv tv.py "printf '%s' '$revision' > $tmp-theme_revision; $(Put 'theme_revision')" | Out-Null
 & $py -I theme_restart.py

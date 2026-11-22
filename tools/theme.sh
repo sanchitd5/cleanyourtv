@@ -125,6 +125,12 @@ del() { echo "rm -f $DIR/$1 2>/dev/null; content delete --uri $URI/$1 2>/dev/nul
 # itself, and an on-TV pick of one of its pictures is read back from it (WallpaperRotation.chosen), so a reset
 # that left the pictures behind still shows the theme it just removed. Both paths use this one string.
 CLEAR_WALLPAPERS="rm -f $DIR/wallpapers/*.[jJ][pP][gG] $DIR/wallpapers/*.[jJ][pP][eE][gG] $DIR/wallpapers/*.[pP][nN][gG] $DIR/wallpapers/*.[wW][eE][bB][pP] 2>/dev/null; content delete --uri $URI/wallpapers 2>/dev/null"
+# wallpaper_video's clips (wallpapers/*.mp4) are not in that string: a clip is tens of megabytes, so a push leaves
+# the ones the theme still has, at the same size, where they are. This removes the others - the names in $1 are
+# kept, so all of them for an empty $1, which is what --reset and a theme without clips ask for. The shell has to
+# be able to list the folder: where it is locked out of Android/data (TCL G07, Android 11), a clip the theme no
+# longer has stays on the TV.
+drop_clips() { echo "for f in $DIR/wallpapers/*.[mM][pP]4; do [ -e \"\$f\" ] || continue; case \" $1 \" in *\" \${f##*/} \"*) ;; *) rm -f \"\$f\" 2>/dev/null; content delete --uri $URI/wallpapers/\${f##*/} 2>/dev/null ;; esac; done"; }
 
 # Both paths end with the same restart, and both are past the point where the TV was written to. The helper's
 # own 2 ("the TV did not answer, so nothing was asked of it") describes the restart alone: on this side of the
@@ -160,7 +166,7 @@ put_on() {   # put $1, after the optional command $2 in the same shell call
   fi
 }
 if [ "${1:-}" = --reset ]; then
-  tv "mkdir -p $DIR 2>/dev/null; $(del config.json); $(del wallpaper.jpg); $(del wallpapers/captions.txt); $CLEAR_WALLPAPERS" >/dev/null
+  tv "mkdir -p $DIR 2>/dev/null; $(del config.json); $(del wallpaper.jpg); $(del wallpapers/captions.txt); $CLEAR_WALLPAPERS; $(drop_clips "")" >/dev/null
   put_on theme_revision "printf '%s' '$REVISION' > $TMP-theme_revision"
   restart_home "the theme was removed"
   echo reset
@@ -199,19 +205,21 @@ esac
 # Every collection name is checked before anything changes on the TV: a name refused halfway through the push
 # left the new config.json and part of the collection behind. b64push.py refuses a path with '..' in it, so
 # such a name (sunset..jpg) is refused here too. The names that pass have no spaces, so NAMES splits on them.
+# CLIPS are wallpaper_video's (*.mp4), named by the same rule and sent last.
 NAMES=""
+CLIPS=""
 if [ -d "$THEME/wallpapers" ]; then
   for IMAGE in "$THEME"/wallpapers/*; do
     [ -f "$IMAGE" ] || continue
     case "$IMAGE" in
-      *.[jJ][pP][gG]|*.[jJ][pP][eE][gG]|*.[pP][nN][gG]|*.[wW][eE][bB][pP])
+      *.[jJ][pP][gG]|*.[jJ][pP][eE][gG]|*.[pP][nN][gG]|*.[wW][eE][bB][pP]|*.[mM][pP]4)
         NAME=$(basename "$IMAGE")
         if [[ ! "$NAME" =~ ^[A-Za-z0-9_.-]+$ || "$NAME" == *..* ]]; then
           echo "unsupported wallpaper filename: $NAME (b64push.py takes letters, digits, '.', '_' and '-', with no" \
             "'..' in the name). Nothing was sent to the TV." >&2
           exit 2
         fi
-        NAMES="$NAMES $NAME" ;;
+        case "$NAME" in *.[mM][pP]4) CLIPS="$CLIPS $NAME" ;; *) NAMES="$NAMES $NAME" ;; esac ;;
     esac
   done
 fi
@@ -237,6 +245,25 @@ if [ -f "$THEME/wallpapers/captions.txt" ]; then
 else
   tv "$(del wallpapers/captions.txt)" >/dev/null || stopped "removing wallpapers/captions.txt"
 fi
+# wallpaper_video's clips, after everything a theme needs to look right without them: they are the long part of
+# a push. One the TV already has at the same size is left alone, so only a first push, or a clip that changed,
+# takes that time. b64push.py carries 24 KB of a file per shell command, which is minutes for a collection; with
+# TV_ADB_BINARY set its commands are 4 KB each, so there adb's own push (tv.py --push) sends the clip instead.
+tv "$(drop_clips "$CLIPS")" >/dev/null || stopped "removing old clips"
+for NAME in $CLIPS; do
+  SIZE=$(wc -c < "$THEME/wallpapers/$NAME" | tr -d ' ')
+  ON_TV=$(tv "{ [ -e $DIR/wallpapers/$NAME ] && wc -c < $DIR/wallpapers/$NAME; } 2>/dev/null || content read --uri $URI/wallpapers/$NAME 2>/dev/null | wc -c") || stopped "wallpapers/$NAME"
+  if [ "$(printf '%s' "$ON_TV" | tr -d ' \r\n')" = "$SIZE" ]; then
+    echo "wallpapers/$NAME is already on the TV"
+    continue
+  fi
+  if [ -n "${TV_ADB_BINARY:-}" ]; then
+    tv --push "$THEME/wallpapers/$NAME" "$(stage "wallpapers/$NAME")" >/dev/null || stopped "wallpapers/$NAME"
+  else
+    "$PY" -I b64push.py "$THEME/wallpapers/$NAME" "$(stage "wallpapers/$NAME")" || stopped "wallpapers/$NAME"
+  fi
+  put_on "wallpapers/$NAME"
+done
 put_on theme_revision "printf '%s' '$REVISION' > $TMP-theme_revision"
 restart_home "the theme was pushed"
 echo applied

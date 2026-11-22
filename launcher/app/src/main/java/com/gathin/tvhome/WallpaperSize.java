@@ -31,4 +31,15 @@ final class WallpaperSize {
         }
         return height > screenH ? new int[]{height, screenH} : null;
     }
+
+    /**
+     * wallpaper_video: a full-screen VideoView stretches a clip to its own shape, so this is the {x, y} scale about
+     * the centre that puts the clip's shape back and fills the view, cutting what hangs over (a centre crop).
+     * {1, 1} for a clip of the view's shape, or while either size is unknown.
+     */
+    static float[] cropScale(int width, int height, int viewW, int viewH) {
+        if (width <= 0 || height <= 0 || viewW <= 0 || viewH <= 0) return new float[]{1f, 1f};
+        float cover = Math.max((float) viewW / width, (float) viewH / height);
+        return new float[]{width * cover / viewW, height * cover / viewH};
+    }
 }

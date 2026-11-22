@@ -283,6 +283,16 @@ final class Config {
     final boolean singleRow;
     /** With single_row, the band runs behind every app in the row, not only the dock apps (config.xml, dock_band_all). */
     final boolean dockBandAll;
+    /** The quick settings panel as a grid of tiles, each "Label=target" (theme quick_panel); empty keeps its rows. */
+    final List<String> quickPanel;
+    /** The quick settings panel with no key helper: a held Back and the Settings pill on Home, and the system's panel button (theme quick_panel_shortcuts). */
+    final boolean quickPanelShortcuts;
+    /** The clock screensaver's wallpaper drifts slowly and names its picture, like an aerial (theme clock_aerial). */
+    final boolean clockAerial;
+    /** wallpaper_video: the collection's .mp4 clips, looped without sound over Home's picture; empty when off. */
+    final List<File> wallpaperVideos;
+    /** wallpaper_video_rotation_minutes: how long one clip stays before the next; 0 keeps the one. */
+    final int wallpaperVideoMinutes;
 
     private Config(List<String> dockApps, boolean fillDock, List<String> hiddenApps, List<String> libraryApps, List<String> libraryExcludedApps, String liveTvPackage,
                    String liveTvAction, String liveTvInputId, Map<String, String> launchActions, Map<String, String> appLabels,
@@ -299,7 +309,8 @@ final class Config {
                    boolean handleViewInputs, boolean tileMenu, boolean dockEvenPadding, boolean dockBand, boolean cinematicDots, boolean cinematicWhiteFocus, boolean wifiStatusColor, int cinematicScrim, int cinematicArt,
                    Map<String, Set<String>> wallpaperMoods, boolean gamepadPassthrough, boolean consumeVolumeKeys, boolean volumePausesFilter, boolean homeIgnoreChannelKeys, boolean powerOnHome, boolean homeLongPressHome, boolean wifiStatusWarnings, List<String> topBarApps, boolean showGreeting, boolean headerWhite, boolean clockWallpaper, int clockWallpaperDim, boolean clockGlow, String glassStyle, boolean singleRow, boolean dockBandAll, boolean lunarDate, int lunarUtcOffset, boolean dateBelowClock, boolean vpnPill, String locale, boolean powerOnHomeAlways, boolean inputsConnectedOnly, boolean inputsCecStateOnly,
                    int openOnStartNetworkWait, boolean openOnStartOnWake, boolean iconOnlyVpn, String clockFormat, boolean backOpensClock, boolean glowSnap,
-                   boolean settingsKeyClearTask) {
+                   boolean settingsKeyClearTask, List<String> quickPanel, boolean quickPanelShortcuts, boolean clockAerial,
+                   List<File> wallpaperVideos, int wallpaperVideoMinutes) {
         this.handleViewInputs = handleViewInputs;
         this.tileMenu = tileMenu;
         this.inputKeycodes = inputKeycodes;
@@ -416,6 +427,11 @@ final class Config {
         this.clockGlow = clockGlow;
         this.singleRow = singleRow;
         this.dockBandAll = dockBandAll;
+        this.quickPanel = quickPanel;
+        this.quickPanelShortcuts = quickPanelShortcuts;
+        this.clockAerial = clockAerial;
+        this.wallpaperVideos = wallpaperVideos;
+        this.wallpaperVideoMinutes = wallpaperVideoMinutes;
         this.glowStyle = glowStyle(glowStyle);
         this.wallpaperCaptions = wallpaperCaptions;
         this.glassStyle = glassStyle(glassStyle);
@@ -550,6 +566,10 @@ final class Config {
         String glassStyle = res.getString(R.string.glass_style);
         boolean singleRow = res.getBoolean(R.bool.single_row);
         boolean dockBandAll = res.getBoolean(R.bool.dock_band_all);
+        // Theme-only, like wallpaper_dim: no resource behind them, so they are off until a config.json sets them.
+        List<String> quickPanel = Collections.emptyList();
+        boolean quickPanelShortcuts = false;
+        boolean clockAerial = false;
         boolean applied = false;
 
         File dir = dir(ctx);
@@ -666,6 +686,9 @@ final class Config {
             clockGlow = bool(json, "clock_glow", clockGlow);
             singleRow = bool(json, "single_row", singleRow);
             dockBandAll = bool(json, "dock_band_all", dockBandAll);
+            quickPanel = stringList(json, "quick_panel", quickPanel);
+            quickPanelShortcuts = bool(json, "quick_panel_shortcuts", quickPanelShortcuts);
+            clockAerial = bool(json, "clock_aerial", clockAerial);
             glowStyle = string(json, "glow_style", glowStyle);
             glassStyle = string(json, "glass_style", glassStyle);
         }
@@ -712,6 +735,11 @@ final class Config {
             wallpaper = chosen.isEmpty() ? null : chosen.get(0);
             wallpaperEnabled = !chosen.isEmpty();
         }
+        // wallpaper_video: the theme's clips play over the picture, unless one was picked on the TV (or none).
+        List<File> videos = chosen == null && wallpaperEnabled && dir != null && json != null
+                && bool(json, "wallpaper_video", false)
+                ? WallpaperRotation.videos(new File(dir, "wallpapers")) : Collections.emptyList();
+        int videoMinutes = json == null ? 0 : integer(json, "wallpaper_video_rotation_minutes", 10, 0, 1440);
         // A festive skin comes only from a theme; config.xml has no festival. seasonal_skin names one the same way
         // but launchers before it ignore the key, so a theme can carry it without older ones showing the diya skin.
         Festival festival = json == null ? Festival.NONE : Festival.parse(festivalName(json),
@@ -732,7 +760,7 @@ final class Config {
                 Math.max(0, Math.min(90, clockWallpaperDim)), clockGlow, glassStyle, singleRow && dockRow, dockBandAll, lunar, lunarOffset,
                 dateBelowClock, vpnPill, locale, powerOnHomeAlways, inputsConnectedOnly, inputsCecStateOnly,
                 Math.max(0, Math.min(600, openOnStartNetworkWait)), openOnStartOnWake, iconOnlyVpn, clockFormat, backOpensClock, glowSnap,
-                settingsKeyClearTask);
+                settingsKeyClearTask, quickPanel, quickPanelShortcuts, clockAerial, videos, videoMinutes);
     }
 
     /**

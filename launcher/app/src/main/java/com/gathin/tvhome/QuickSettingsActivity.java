@@ -2,7 +2,10 @@ package com.gathin.tvhome;
 
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
+import android.content.ComponentName;
 import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.view.View;
@@ -11,11 +14,13 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.util.List;
+
 /**
- * The panel the remote's Settings button opens when {@code settings_key_panel} is on (HomeKeyService):
- * a few glass rows under the Settings pill, over Home or whatever app is playing. Translucent and in a
- * task of its own, so the app behind keeps running and Back returns to it. Pressing Settings again
- * closes the panel.
+ * The panel the remote's Settings button opens when {@code settings_key_panel} is on (HomeKeyService), and
+ * Home itself with {@code quick_panel_shortcuts}: a few glass rows under the Settings pill, or the tiles of
+ * {@code quick_panel}, over Home or whatever app is playing. Translucent and in a task of its own, so the
+ * app behind keeps running and Back returns to it. Pressing Settings again closes the panel.
  */
 public final class QuickSettingsActivity extends Activity {
     @Override
@@ -40,18 +45,23 @@ public final class QuickSettingsActivity extends Activity {
         }
         findViewById(R.id.scrim).setOnClickListener(v -> finish());
         LinearLayout rows = findViewById(R.id.rows);
-        addRow(rows, R.drawable.ic_settings, R.string.tv_settings, 0, SystemSettings.intent(this, Settings.ACTION_SETTINGS));
-        addRow(rows, R.drawable.ic_picture, R.string.quick_picture, 0, SystemSettings.displayIntent(this));
-        addRow(rows, R.drawable.ic_wifi, R.string.quick_network, 0, SystemSettings.intent(this, Settings.ACTION_WIFI_SETTINGS));
-        addRow(rows, R.drawable.ic_apps, R.string.quick_apps, R.string.quick_apps_hint,
-                SystemSettings.intent(this, Settings.ACTION_MANAGE_APPLICATIONS_SETTINGS));
-        // Through Home, so it rebuilds with the new choices when Launcher settings closes.
-        addRow(rows, R.drawable.ic_home_settings, R.string.launcher_settings, 0,
-                new Intent(this, MainActivity.class).setAction(MainActivity.ACTION_LAUNCHER_SETTINGS));
-        rows.getChildAt(0).requestFocus();
+        if (!addTiles(rows, Config.load(this).quickPanel)) {
+            addRow(rows, R.drawable.ic_settings, R.string.tv_settings, 0, SystemSettings.intent(this, Settings.ACTION_SETTINGS));
+            addRow(rows, R.drawable.ic_picture, R.string.quick_picture, 0, SystemSettings.displayIntent(this));
+            addRow(rows, R.drawable.ic_wifi, R.string.quick_network, 0, SystemSettings.intent(this, Settings.ACTION_WIFI_SETTINGS));
+            addRow(rows, R.drawable.ic_apps, R.string.quick_apps, R.string.quick_apps_hint,
+                    SystemSettings.intent(this, Settings.ACTION_MANAGE_APPLICATIONS_SETTINGS));
+            // Through Home, so it rebuilds with the new choices when Launcher settings closes.
+            addRow(rows, R.drawable.ic_home_settings, R.string.launcher_settings, 0,
+                    new Intent(this, MainActivity.class).setAction(MainActivity.ACTION_LAUNCHER_SETTINGS));
+        }
+        rows.getChildAt(0).requestFocus();   // the first row, or the first tile of the first pair
     }
 
-    /** Settings pressed again while the panel is up. */
+    /**
+     * Settings pressed again while the panel is up, or the system toggling its notification panel
+     * (QuickPanel in the manifest).
+     */
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
@@ -75,7 +85,13 @@ public final class QuickSettingsActivity extends Activity {
         TextView hint = row.findViewById(R.id.status);
         if (status != 0) hint.setText(status);
         else hint.setVisibility(View.GONE);
-        row.setOnClickListener(v -> {
+        opens(row, target);
+        rows.addView(row);
+    }
+
+    /** OK on a row or a tile opens its target and closes the panel. */
+    private void opens(View view, Intent target) {
+        view.setOnClickListener(v -> {
             try {
                 startActivity(target.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
             } catch (ActivityNotFoundException | SecurityException e) {
@@ -83,6 +99,49 @@ public final class QuickSettingsActivity extends Activity {
             }
             finish();
         });
-        rows.addView(row);
+    }
+
+    /**
+     * quick_panel: the panel as a grid of the top bar's glass pills, two to a row, one per "Label=target" entry.
+     * A tile this TV cannot open is left out: nothing answers its target, or the activity is not exported.
+     * False when no tile is left (or the list is empty): the rows show then.
+     */
+    private boolean addTiles(LinearLayout rows, List<String> entries) {
+        float density = getResources().getDisplayMetrics().density;
+        int gap = (int) (4 * density);
+        LinearLayout pair = null;
+        for (String entry : entries) {
+            String[] tile = tile(entry);
+            if (tile == null) continue;
+            Intent target = target(tile[1]);
+            ResolveInfo found = getPackageManager().resolveActivity(target, PackageManager.MATCH_DEFAULT_ONLY);
+            if (found == null || !found.activityInfo.exported) continue;
+            TextView view = new TextView(this, null, 0, R.style.TopButton);
+            view.setText(tile[0]);
+            view.setSingleLine();
+            opens(view, target);
+            if (pair == null || pair.getChildCount() > 1) rows.addView(pair = new LinearLayout(this));
+            LinearLayout.LayoutParams size = new LinearLayout.LayoutParams((int) (150 * density), (int) (42 * density));
+            size.setMargins(gap, gap, gap, gap);
+            pair.addView(view, size);
+        }
+        return pair != null;
+    }
+
+    /** A quick_panel entry, "Label=target", as {label, target}; null when a half is missing. */
+    static String[] tile(String entry) {
+        int eq = entry.indexOf('=');
+        if (eq < 0) return null;
+        String label = entry.substring(0, eq).trim(), target = entry.substring(eq + 1).trim();
+        return label.isEmpty() || target.isEmpty() ? null : new String[]{label, target};
+    }
+
+    /** A tile's target: Home's Inputs menu for the word inputs, an activity for "package/.Activity", else an action. */
+    private Intent target(String target) {
+        if (target.equals("inputs")) {
+            return new Intent(this, MainActivity.class).setAction(MainActivity.ACTION_VIEW_INPUTS);
+        }
+        ComponentName component = ComponentName.unflattenFromString(target);
+        return component != null ? new Intent().setComponent(component) : new Intent(target);
     }
 }

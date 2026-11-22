@@ -21,7 +21,8 @@ final class ThemeFiles {
                     ? name : null;
         }
         if (segments.size() == 2 && WALLPAPERS.equals(segments.get(0))
-                && (collectionImage(segments.get(1)) || WallpaperCaptions.FILE_NAME.equals(segments.get(1)))) {
+                && (collectionImage(segments.get(1)) || clip(segments.get(1))
+                || WallpaperCaptions.FILE_NAME.equals(segments.get(1)))) {
             return WALLPAPERS + "/" + segments.get(1);
         }
         return null;
@@ -30,6 +31,17 @@ final class ThemeFiles {
     /** True for "wallpapers" alone: a delete of it clears the collection's images. */
     static boolean isCollection(List<String> segments) {
         return segments != null && segments.size() == 1 && WALLPAPERS.equals(segments.get(0));
+    }
+
+    /**
+     * wallpaper_video: a clip is named as a picture is, with .mp4 where the picture has its suffix. It is not a
+     * collection image: clearing the collection leaves the clips, which tools/theme.sh replaces one by one, and
+     * only the ones that changed.
+     */
+    static boolean clip(String name) {
+        int end = name == null ? 0 : name.length() - 4;
+        return end > 0 && name.regionMatches(true, end, ".mp4", 0, 4)
+                && collectionImage(name.substring(0, end) + ".jpg");
     }
 
     static boolean collectionImage(String name) {
