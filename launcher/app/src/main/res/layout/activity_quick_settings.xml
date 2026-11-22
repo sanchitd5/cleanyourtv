@@ -75,5 +75,24 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical" />
+
+        <!-- quick_panel_credit: the theme's credit line, bottom-left of the sheet. Not focusable, not clickable, not announced. -->
+        <TextView
+            android:id="@+id/qp_credit"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:gravity="bottom|start"
+            android:paddingStart="12dp"
+            android:paddingTop="8dp"
+            android:paddingBottom="8dp"
+            android:singleLine="true"
+            android:ellipsize="end"
+            android:focusable="false"
+            android:clickable="false"
+            android:importantForAccessibility="no"
+            android:textColor="#80FFFFFF"
+            android:textSize="12sp"
+            android:visibility="gone" />
     </LinearLayout>
 </FrameLayout>
