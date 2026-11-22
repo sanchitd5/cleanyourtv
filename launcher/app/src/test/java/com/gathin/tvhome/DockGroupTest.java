@@ -51,10 +51,10 @@ public class DockGroupTest {
     }
 
     @Test public void reduceTransparencyChosenOnTheTvWinsOverTheTheme() {
-        assertEquals(true, Config.chosenReduceTransparency(1, false));
-        assertEquals(false, Config.chosenReduceTransparency(0, true));
-        assertEquals(true, Config.chosenReduceTransparency(-1, true));
-        assertEquals(false, Config.chosenReduceTransparency(-1, false));
-        assertEquals(true, Config.chosenReduceTransparency(7, true));
+        assertEquals(true, Config.chosenSwitch(1, false));
+        assertEquals(false, Config.chosenSwitch(0, true));
+        assertEquals(true, Config.chosenSwitch(-1, true));
+        assertEquals(false, Config.chosenSwitch(-1, false));
+        assertEquals(true, Config.chosenSwitch(7, true));
     }
 }

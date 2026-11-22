@@ -168,8 +168,14 @@ put_on() {   # put $1, after the optional command $2 in the same shell call
     stopped "$1"
   fi
 }
+# --- screensaver_wallpapers: the theme folder of stills the clock screensaver shows (h-guard) ---
+# Pushed like wallpapers/ but kept the way clips are: a still the TV already has at the same size is left alone,
+# and one the theme no longer has is deleted. SS_DEFAULT is the folder --reset and a theme without the key clean.
+SS_DEFAULT=screensaver
+ss_drop() { echo "for f in $DIR/$1/*; do [ -e \"\$f\" ] || continue; case \" $2 \" in *\" \${f##*/} \"*) ;; *) rm -f \"\$f\" 2>/dev/null; content delete --uri $URI/$1/\${f##*/} 2>/dev/null ;; esac; done"; }
+# --- end screensaver_wallpapers ---
 if [ "${1:-}" = --reset ]; then
-  tv "mkdir -p $DIR 2>/dev/null; $(del config.json); $(del wallpaper.jpg); $(del wallpapers/captions.txt); $CLEAR_WALLPAPERS; $(drop_clips ""); $(drop_inputs "")" >/dev/null
+  tv "mkdir -p $DIR 2>/dev/null; $(del config.json); $(del wallpaper.jpg); $(del wallpapers/captions.txt); $CLEAR_WALLPAPERS; $(drop_clips ""); $(drop_inputs ""); $(ss_drop "$SS_DEFAULT" "")" >/dev/null
   put_on theme_revision "printf '%s' '$REVISION' > $TMP-theme_revision"
   restart_home "the theme was removed"
   echo reset
@@ -244,6 +250,34 @@ if [ -d "$THEME/inputs" ]; then
     esac
   done
 fi
+
+# --- screensaver_wallpapers: read the folder name and check its file names before anything is sent (h-guard) ---
+SS_FOLDER="$("$PY" -I -c '
+import json, re, sys
+try:
+    with open(sys.argv[1], encoding="utf-8-sig") as handle:
+        name = json.load(handle).get("screensaver_wallpapers", "")
+except (OSError, ValueError, AttributeError):
+    name = ""
+print("screensaver" if name == "screensaver" else "")   # the one folder ThemeProvider takes
+' "$THEME/config.json" 2>/dev/null)"
+SS_NAMES=""
+if [ -n "$SS_FOLDER" ] && [ -d "$THEME/$SS_FOLDER" ]; then
+  for IMAGE in "$THEME/$SS_FOLDER"/*; do
+    [ -f "$IMAGE" ] || continue
+    case "$IMAGE" in
+      *.[jJ][pP][gG]|*.[jJ][pP][eE][gG]|*.[pP][nN][gG]|*.[wW][eE][bB][pP])
+        NAME=$(basename "$IMAGE")
+        if [[ ! "$NAME" =~ ^[A-Za-z0-9_.-]+$ || "$NAME" == *..* ]]; then
+          echo "unsupported screensaver filename: $NAME (letters, digits, '.', '_' and '-', with no '..'). Nothing was sent to the TV." >&2
+          exit 2
+        fi
+        SS_NAMES="$SS_NAMES $NAME" ;;
+    esac
+  done
+fi
+# --- end screensaver_wallpapers ---
+
 tv "mkdir -p $DIR" >/dev/null 2>&1 || true
 tv --push "$THEME/config.json" "$TMP-config.json" >/dev/null
 put_on config.json
@@ -298,6 +332,25 @@ for NAME in $INPUTS; do
   "$PY" -I b64push.py "$THEME/inputs/$NAME" "$(stage "inputs/$NAME")" || stopped "inputs/$NAME"
   put_on "inputs/$NAME"
 done
+# --- screensaver_wallpapers: push the folder (h-guard) ---
+SS_KEEP="$SS_NAMES"
+[ -n "$SS_FOLDER" ] && [ -f "$THEME/$SS_FOLDER/captions.txt" ] && SS_KEEP="$SS_KEEP captions.txt"
+tv "$(ss_drop "${SS_FOLDER:-$SS_DEFAULT}" "$SS_KEEP")" >/dev/null || stopped "removing old screensaver pictures"
+for NAME in $SS_NAMES; do
+  SIZE=$(wc -c < "$THEME/$SS_FOLDER/$NAME" | tr -d ' ')
+  ON_TV=$(tv "{ [ -e $DIR/$SS_FOLDER/$NAME ] && wc -c < $DIR/$SS_FOLDER/$NAME; } 2>/dev/null || content read --uri $URI/$SS_FOLDER/$NAME 2>/dev/null | wc -c") || stopped "$SS_FOLDER/$NAME"
+  if [ "$(printf '%s' "$ON_TV" | tr -d ' \r\n')" = "$SIZE" ]; then
+    echo "$SS_FOLDER/$NAME is already on the TV"
+    continue
+  fi
+  "$PY" -I b64push.py "$THEME/$SS_FOLDER/$NAME" "$(stage "$SS_FOLDER/$NAME")" || stopped "$SS_FOLDER/$NAME"
+  put_on "$SS_FOLDER/$NAME"
+done
+if [ -n "$SS_FOLDER" ] && [ -f "$THEME/$SS_FOLDER/captions.txt" ]; then
+  "$PY" -I b64push.py "$THEME/$SS_FOLDER/captions.txt" "$(stage "$SS_FOLDER/captions.txt")" || stopped "$SS_FOLDER/captions.txt"
+  put_on "$SS_FOLDER/captions.txt"
+fi
+# --- end screensaver_wallpapers ---
 put_on theme_revision "printf '%s' '$REVISION' > $TMP-theme_revision"
 restart_home "the theme was pushed"
 echo applied
