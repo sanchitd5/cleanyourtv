@@ -368,6 +368,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private boolean dockEditing;
     /** Dock place being changed in edit-dock mode, or -1 while the place is still being chosen. */
     private int dockEditSlot = -1;
+    /** h-group: grouped input tiles at the last reload, to refresh the dock decoration when it changes. */
+    private int groupedInputs;
     /** Tile menu's "Add to dock": the app waiting for a dock place in edit-dock mode, or null. */
     private String dockEditAppKey;
     private AppLibraryDialog appLibrary;
@@ -744,7 +746,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             }
         });
         if (dockRow) grid.addItemDecoration(new DockDecoration(COLUMNS, density, cinematic, cfg.alwaysShowNames, cfg.dockOpacity, cfg.dockGlass, cfg.dockEvenPadding, cfg.dockBand,
-                singleRow, cfg.dockBandAll));
+                singleRow, cfg.dockBandAll,
+                cfg.inputGroupActive() ? cfg.inputGroup : Config.INPUT_GROUP_OFF, rtlAppGrid,   // h-group
+                () -> adapter == null ? 0 : adapter.inputCount(), () -> adapter == null ? 0 : adapter.tileWidthPx()));
         if (cfg.fadeRows) TopFade.attach(grid, 48 * density);
         // Reduced motion: the tiles are simply there, with no entrance (reloadApps skips it there too).
         if (animations && !reducedMotion) {
@@ -1331,6 +1335,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         final List<InputTiles.Tile> inputs = inputTileSource != null ? inputTileSource.list() : Collections.emptyList();
         inputTileSignature = InputTiles.signature(inputs);
         adapter.reload(cards.isEmpty() ? none : CardFeature.run(() -> Cards.shown(cards), none), leanback, inputs);
+        // h-group: the divider and the offsets follow the number of grouped inputs.
+        if (adapter.inputCount() != groupedInputs) {
+            groupedInputs = adapter.inputCount();
+            grid.invalidateItemDecorations();
+        }
         lastFocusedKey = returnKey;
         lastFocused = returnSlot;
         packageSequence = currentPackageSequence(packageSequence);
@@ -1647,7 +1656,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (!beginReorder()) return;
         dockEditing = true;
         dockEditSlot = -1;
-        focusTile(0);
+        focusTile(GridNavigation.appSlot(0, adapter.inputCount(), COLUMNS));   // h-group: app places only
         Toast.makeText(this, R.string.dock_edit_hint, Toast.LENGTH_LONG).show();
     }
 
@@ -1681,20 +1690,21 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (ok && pos >= 0) {
             if (!down) {
                 int n = adapter.movableCount();
+                final int ic = adapter.inputCount();   // h-group: inputs are neither places nor apps to swap in
                 if (dockEditAppKey != null) {
-                    if (pos < Math.min(COLUMNS, n)) {
+                    if (pos >= ic && pos < Math.min(COLUMNS, n)) {
                         int from = adapter.positionOf(dockEditAppKey);
                         if (from >= 0) swapIntoDock(pos, from);
                         else endReorder();
                     }
                 } else if (dockEditSlot < 0) {
-                    if (pos < Math.min(COLUMNS, n)) {
+                    if (pos >= ic && pos < Math.min(COLUMNS, n)) {
                         dockEditSlot = pos;
                         dimOthers();
                         focusTile(Math.min(COLUMNS, n - 1));
                         Toast.makeText(this, R.string.dock_edit_pick_app, Toast.LENGTH_LONG).show();
                     }
-                } else if (pos < n) {
+                } else if (pos >= ic && pos < n) {
                     swapIntoDock(dockEditSlot, pos);
                 }
             }
@@ -1722,7 +1732,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             Toast.makeText(this, R.string.dock_edit_pick_app, Toast.LENGTH_LONG).show();
         } else {
             dockEditAppKey = key;
-            focusTile(0);
+            focusTile(GridNavigation.appSlot(0, adapter.inputCount(), COLUMNS));
             Toast.makeText(this, R.string.dock_edit_pick_place, Toast.LENGTH_LONG).show();
         }
     }
@@ -1827,6 +1837,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         else if (from + COLUMNS < n) to = from + COLUMNS;
         else to = from / COLUMNS < (n - 1) / COLUMNS ? n - 1 : from;
         if (to < 0 || to >= n || to == from) return;
+        if (!GridNavigation.sameGroup(from, to, adapter.inputCount())) return;   // h-group: acts like the row's edge
         keepScroll(() -> adapter.move(from, to));
         // The owner carries this tile: where it lands decides whether it is in the dock, not dock_apps (#499).
         if (to < COLUMNS) dockInSession.add(movingKey);
@@ -4031,7 +4042,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         View panel = getLayoutInflater().inflate(R.layout.popup_inputs, root, false);
         LinearLayout rows = panel.findViewById(R.id.rows);
         PopupWindow popup = glassPopup(panel, (int) (200 * density));
-        if (dockRow && position < adapter.movableCount()) {
+        if (dockRow && position < adapter.movableCount() && position >= adapter.inputCount()) {   // h-group: no dock row for grouped inputs
             boolean inDock = position < COLUMNS;
             addSettingsMenuRow(rows, popup, inDock ? R.string.tile_replace_in_dock : R.string.tile_add_to_dock,
                     () -> startDockEditFor(key, inDock));
