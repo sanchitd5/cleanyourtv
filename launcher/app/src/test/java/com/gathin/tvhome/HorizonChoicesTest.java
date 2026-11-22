@@ -48,4 +48,25 @@ public class HorizonChoicesTest {
         for (int v : Config.CLOCK_DIM_AFTER_CHOICES) assertEquals(v, Config.chosenTiming(v, 5, 240));
         for (int v : Config.CLOCK_BLANK_AFTER_CHOICES) assertEquals(v, Config.chosenTiming(v, 30, 720));
     }
+
+    @Test public void aTopBarLayoutChosenOnTheTvWinsAndFollowThemeKeepsTheTheme() {
+        assertEquals("classic", Config.chosenTopBarLayout(0, "tvos"));
+        assertEquals("split", Config.chosenTopBarLayout(1, "classic"));
+        assertEquals("tvos", Config.chosenTopBarLayout(2, "classic"));
+        assertEquals("tvos", Config.chosenTopBarLayout(-1, "tvos"));
+        assertEquals("split", Config.chosenTopBarLayout(3, "split"));
+    }
+
+    @Test public void anUnknownTopBarLayoutIsClassic() {
+        assertEquals("classic", Config.topBarLayout("nonsense"));
+        assertEquals("classic", Config.topBarLayout(null));
+        assertEquals("tvos", Config.topBarLayout(" TVOS "));
+        assertEquals("split", Config.topBarLayout("split"));
+    }
+
+    @Test public void theTopBarKeysAreForgottenByFollowTheme() {
+        java.util.List<String> keys = java.util.Arrays.asList(Config.HORIZON_KEYS);
+        org.junit.Assert.assertTrue(keys.contains(Config.TOP_BAR_LAYOUT_KEY));
+        org.junit.Assert.assertTrue(keys.contains(Config.TOP_BAR_DATE_KEY));
+    }
 }

@@ -187,6 +187,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     /** Meta line for tiles that are not apps (input tiles); null until something supplies it. */
     private ShelfMetaSource shelfMeta;
     private HomeIdle homeIdle;
+    private TopBar topBar;   // top_bar_layout split or tvos; null for classic
     private boolean animations;
     private boolean advancedEffects;
     private TextView greeting;
@@ -992,6 +993,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             }
         }
         if (festive) applyFestiveSkin((TextView) btnInputs, (TextView) btnSettings);
+        topBar = TopBar.attach(this, cfg, density);
 
         // Hide the glass when focus leaves the tiles.
         // Taken off in onDestroy: recreate() keeps the window, and a listener left on it held every earlier Home.
