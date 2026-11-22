@@ -501,6 +501,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         density = getResources().getDisplayMetrics().density;
         // config.xml, overlaid by config.json from a pushed theme (see Config and tools/theme.sh).
         Config cfg = Config.load(this);
+        Glass.configure(cfg);
         homeAppKeys = RemoteKeys.parseAppKeys(cfg.appKeys);
         clockFormat = cfg.clockFormat;
         ClockFormat.apply(getWindow().getDecorView(), clockFormat);
@@ -3822,13 +3823,16 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         popup.setElevation(0f);
         popup.setOnDismissListener(() -> {
             if (openPopup == popup) openPopup = null;
+            if (Glass.on() && wallpaperPlayer != null) wallpaperPlayer.stopLiveSampling();   // glass:
         });
         openPopup = popup;
+        if (Glass.apply(panel, GlassSurface.POPUP_RADIUS_DP, true) && wallpaperPlayer != null) wallpaperPlayer.startLiveSampling();   // glass: one sample now, then 1 Hz
         return popup;
     }
 
     /** Drop in: fade and unfold from the top edge, hanging under the anchor pill. */
     private void dropIn(PopupWindow popup, View panel, View anchor, int gravity) {
+        if (panel instanceof ViewGroup) Glass.rows((ViewGroup) panel);
         panel.setAlpha(0f);
         panel.setPivotY(0f);
         panel.setScaleY(0.92f);
@@ -4156,6 +4160,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             show.setNextFocusRightId(R.id.btnKeep);
         }
 
+        if (Glass.apply(panel, GlassSurface.DIALOG_RADIUS_DP, true)) Glass.rows((ViewGroup) panel);
         final Dialog dialog = new Dialog(this);
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
         dialog.setContentView(panel);

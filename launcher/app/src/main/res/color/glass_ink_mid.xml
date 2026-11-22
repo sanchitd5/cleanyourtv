@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Secondary text on a glass panel: 78 % white at rest, ink on the focused capsule. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true" android:color="#E6101216" />
+    <item android:color="#C7FFFFFF" />
+</selector>
