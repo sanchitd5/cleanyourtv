@@ -1207,6 +1207,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (showStats) startStats();
         if (gameDay != null) gameDay.start();
         sky.update();
+        wallpaperPlayer.stopLiveSampling();   // video under panel: the panel is gone, no more samples
         wallpaperPlayer.start();
         handler.postDelayed(minuteTick, MINUTE_MS);
         if (festive && lamp != null) {
@@ -1424,8 +1425,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             greeting.setAlpha(0f);
             greeting.setVisibility(View.INVISIBLE);
         }
-        wallpaperPlayer.sampleBackdrop();   // glass: the clip pauses on this frame, the quick panel over Home gets it
-        wallpaperPlayer.stop();
+        wallpaperPlayer.sampleBackdrop();   // glass: the quick panel over Home opens on this frame
+        // video under panel: the clip keeps playing here (Home is still visible under a translucent panel); onStop pauses it
         stopAmbientAnimation();
         hero.animate().cancel();
         ambient.animate().cancel();
@@ -1442,6 +1443,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (cardPrompt != null) cardPrompt.dismiss();
         if (appLibrary != null) appLibrary.close();
         GlassPopup.now(openPopup);   // glass motion: no exit animation while Home leaves
+        // video under panel: the panel's glass follows the playing clip, one sample a second (after the popup's dismiss stopped its own)
+        if (VideoUnderPanel.coveredByPanel(resumed, started) && Glass.on()) wallpaperPlayer.startLiveSampling();
     }
 
     @Override
@@ -1454,6 +1457,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         stopped = true;
         tileRefresh.onStop();
         GlassBackdrop.setHomeVisible(false);
+        wallpaperPlayer.stop();   // video under panel: the pause moved here from onPause; release() below is the real release
         wallpaperPlayer.release();
     }
 
