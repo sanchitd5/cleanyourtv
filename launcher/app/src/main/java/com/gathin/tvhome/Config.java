@@ -294,6 +294,79 @@ final class Config {
     /** wallpaper_video_rotation_minutes: how long one clip stays before the next; 0 keeps the one. */
     final int wallpaperVideoMinutes;
 
+    // --- Horizon (HOME-DESIGN.md section 8): theme-only keys, off or neutral until a theme sets them. ---
+    /** A typographic shelf above the dock with two fixed scrims (theme top_shelf). */
+    final boolean topShelf;
+    /** Strength of the shelf's two gradients in percent, 0 to 100 (theme top_shelf_scrim). */
+    final int topShelfScrim;
+    /** dp the focused tile's artwork trails a D-pad move, 0 to 6; 0 is off (theme focus_parallax). */
+    final int focusParallax;
+    /** One band of light crosses a tile as it takes focus (theme focus_sheen). */
+    final boolean focusSheen;
+    /** Every HDMI port with a device gets a tile among the apps (theme input_tiles). */
+    final boolean inputTiles;
+    /** With input_tiles, ports with no device keep a dimmed tile too (theme input_tiles_show_empty). */
+    final boolean inputTilesShowEmpty;
+    /** Device key, family or kind to a logo file in the theme's inputs/ folder (theme input_logos, "key=file"). */
+    final Map<String, String> inputLogos;
+    /** With show_greeting, the greeting shows 8 s once per part of the day (theme greeting_once). */
+    final boolean greetingOnce;
+    /** Seconds without a key before Home goes calm; 0 is off. A choice made on the TV wins (see {@link #HOME_IDLE_CALM_KEY}). */
+    final int homeIdleCalmSeconds;
+    /** Seconds without a key before Home dims; 0 is off. A choice made on the TV wins (see {@link #HOME_IDLE_DIM_KEY}). */
+    final int homeIdleDimSeconds;
+    /** While Home is left alone the chrome glides a few pixels every minute (theme home_idle_shift). */
+    final boolean homeIdleShift;
+    /** Seconds a wallpaper caption stays before fading; 0 keeps it as long as the picture shows (theme wallpaper_caption_seconds). */
+    final int wallpaperCaptionSeconds;
+    /** Seconds between the clock screensaver's moves, 15 to 600 (theme clock_shift_seconds). */
+    final int clockShiftSeconds;
+    /** Minutes into the clock screensaver before it dims; 0 is off. A choice made on the TV wins (see {@link #CLOCK_DIM_AFTER_KEY}). */
+    final int clockDimAfterMinutes;
+    /** Brightness the screensaver dims to, percent, 10 to 100 (theme clock_dim_floor). */
+    final int clockDimFloor;
+    /** Minutes into the clock screensaver before it fades to black; 0 is off ("Off"). A choice made on the TV wins (see {@link #CLOCK_BLANK_AFTER_KEY}). */
+    final int clockBlankAfterMinutes;
+
+    /*
+     * On-TV overrides for Horizon (HOME-DESIGN.md section 16, decisions 1 and 6). They live in the same
+     * launcher_settings preferences as the other Launcher settings rows, but unlike those they are NOT cleared
+     * by a theme push (syncThemeChoices leaves them alone): the owner's choice survives a theme update. Only the
+     * "Follow theme" row removes them, through {@link #clearHorizonChoices}. A settings row writes the key with
+     * putInt and calls changed(); Config.load() then returns the chosen value in the matching field above (for
+     * the dock, in {@link #columns}). Absent means the theme decides; 0 is a real choice, "Off".
+     */
+    /** 5 or 6 dock tiles; the tile size follows from it. Overrides the theme's columns (and the older "columns" choice). */
+    static final String DOCK_TILES_KEY = "dock_tiles";
+    static final String HOME_IDLE_CALM_KEY = "home_idle_calm_seconds";
+    static final String HOME_IDLE_DIM_KEY = "home_idle_dim_seconds";
+    static final String CLOCK_DIM_AFTER_KEY = "clock_dim_after_minutes";
+    static final String CLOCK_BLANK_AFTER_KEY = "clock_blank_after_minutes";
+    /** What the rows offer; any value in 0..max is honoured when read, so a theme-pushed value outside these still works. */
+    static final int[] DOCK_TILE_CHOICES = {5, 6};
+    static final int[] HOME_IDLE_CALM_CHOICES = {0, 10, 20, 30, 60};
+    static final int[] HOME_IDLE_DIM_CHOICES = {0, 60, 90, 120, 300};
+    static final int[] CLOCK_DIM_AFTER_CHOICES = {0, 2, 5, 10, 15};
+    static final int[] CLOCK_BLANK_AFTER_CHOICES = {0, 15, 30, 60, 120};
+    private static final int HOME_IDLE_CALM_MAX = 600, HOME_IDLE_DIM_MAX = 3600,
+            CLOCK_DIM_AFTER_MAX = 240, CLOCK_BLANK_AFTER_MAX = 720;
+
+    /** The dock tile count chosen on the TV (5 or 6), or {@code current} when none (-1) or anything else is saved. */
+    static int chosenDockTiles(int chosen, int current) {
+        return chosen == 5 || chosen == 6 ? chosen : current;
+    }
+
+    /** A timing chosen on the TV, 0 ("Off") to {@code max}, or the theme's when none (-1) or an out-of-range one is saved. */
+    static int chosenTiming(int chosen, int theme, int max) {
+        return chosen >= 0 && chosen <= max ? chosen : theme;
+    }
+
+    /** Forgets every Horizon choice made on the TV, so the theme decides again ("Follow theme"). Does not commit. */
+    static SharedPreferences.Editor clearHorizonChoices(SharedPreferences.Editor editor) {
+        return editor.remove(DOCK_TILES_KEY).remove(HOME_IDLE_CALM_KEY).remove(HOME_IDLE_DIM_KEY)
+                .remove(CLOCK_DIM_AFTER_KEY).remove(CLOCK_BLANK_AFTER_KEY);
+    }
+
     private Config(List<String> dockApps, boolean fillDock, List<String> hiddenApps, List<String> libraryApps, List<String> libraryExcludedApps, String liveTvPackage,
                    String liveTvAction, String liveTvInputId, Map<String, String> launchActions, Map<String, String> appLabels,
                    Map<String, String> appBanners, String sourcePanelService, String sourcePanelAction,
@@ -310,7 +383,10 @@ final class Config {
                    Map<String, Set<String>> wallpaperMoods, boolean gamepadPassthrough, boolean consumeVolumeKeys, boolean volumePausesFilter, boolean homeIgnoreChannelKeys, boolean powerOnHome, boolean homeLongPressHome, boolean wifiStatusWarnings, List<String> topBarApps, boolean showGreeting, boolean headerWhite, boolean clockWallpaper, int clockWallpaperDim, boolean clockGlow, String glassStyle, boolean singleRow, boolean dockBandAll, boolean lunarDate, int lunarUtcOffset, boolean dateBelowClock, boolean vpnPill, String locale, boolean powerOnHomeAlways, boolean inputsConnectedOnly, boolean inputsCecStateOnly,
                    int openOnStartNetworkWait, boolean openOnStartOnWake, boolean iconOnlyVpn, String clockFormat, boolean backOpensClock, boolean glowSnap,
                    boolean settingsKeyClearTask, List<String> quickPanel, boolean quickPanelShortcuts, boolean clockAerial,
-                   List<File> wallpaperVideos, int wallpaperVideoMinutes) {
+                   List<File> wallpaperVideos, int wallpaperVideoMinutes,
+                   boolean topShelf, int topShelfScrim, int focusParallax, boolean focusSheen, boolean inputTiles, boolean inputTilesShowEmpty,
+                   Map<String, String> inputLogos, boolean greetingOnce, int homeIdleCalmSeconds, int homeIdleDimSeconds, boolean homeIdleShift,
+                   int wallpaperCaptionSeconds, int clockShiftSeconds, int clockDimAfterMinutes, int clockDimFloor, int clockBlankAfterMinutes) {
         this.handleViewInputs = handleViewInputs;
         this.tileMenu = tileMenu;
         this.inputKeycodes = inputKeycodes;
@@ -432,6 +508,22 @@ final class Config {
         this.clockAerial = clockAerial;
         this.wallpaperVideos = wallpaperVideos;
         this.wallpaperVideoMinutes = wallpaperVideoMinutes;
+        this.topShelf = topShelf;
+        this.topShelfScrim = topShelfScrim;
+        this.focusParallax = focusParallax;
+        this.focusSheen = focusSheen;
+        this.inputTiles = inputTiles;
+        this.inputTilesShowEmpty = inputTilesShowEmpty;
+        this.inputLogos = Collections.unmodifiableMap(inputLogos);
+        this.greetingOnce = greetingOnce;
+        this.homeIdleCalmSeconds = homeIdleCalmSeconds;
+        this.homeIdleDimSeconds = homeIdleDimSeconds;
+        this.homeIdleShift = homeIdleShift;
+        this.wallpaperCaptionSeconds = wallpaperCaptionSeconds;
+        this.clockShiftSeconds = clockShiftSeconds;
+        this.clockDimAfterMinutes = clockDimAfterMinutes;
+        this.clockDimFloor = clockDimFloor;
+        this.clockBlankAfterMinutes = clockBlankAfterMinutes;
         this.glowStyle = glowStyle(glowStyle);
         this.wallpaperCaptions = wallpaperCaptions;
         this.glassStyle = glassStyle(glassStyle);
@@ -570,6 +662,22 @@ final class Config {
         List<String> quickPanel = Collections.emptyList();
         boolean quickPanelShortcuts = false;
         boolean clockAerial = false;
+        boolean topShelf = false;
+        int topShelfScrim = 100;
+        int focusParallax = 0;
+        boolean focusSheen = false;
+        boolean inputTiles = false;
+        boolean inputTilesShowEmpty = false;
+        List<String> inputLogos = Collections.emptyList();
+        boolean greetingOnce = false;
+        int homeIdleCalmSeconds = 0;
+        int homeIdleDimSeconds = 0;
+        boolean homeIdleShift = false;
+        int wallpaperCaptionSeconds = 0;
+        int clockShiftSeconds = 60;
+        int clockDimAfterMinutes = 0;
+        int clockDimFloor = 35;
+        int clockBlankAfterMinutes = 0;
         boolean applied = false;
 
         File dir = dir(ctx);
@@ -689,6 +797,22 @@ final class Config {
             quickPanel = stringList(json, "quick_panel", quickPanel);
             quickPanelShortcuts = bool(json, "quick_panel_shortcuts", quickPanelShortcuts);
             clockAerial = bool(json, "clock_aerial", clockAerial);
+            topShelf = bool(json, "top_shelf", topShelf);
+            topShelfScrim = integer(json, "top_shelf_scrim", topShelfScrim, 0, 100);
+            focusParallax = integer(json, "focus_parallax", focusParallax, 0, 6);
+            focusSheen = bool(json, "focus_sheen", focusSheen);
+            inputTiles = bool(json, "input_tiles", inputTiles);
+            inputTilesShowEmpty = bool(json, "input_tiles_show_empty", inputTilesShowEmpty);
+            inputLogos = stringList(json, "input_logos", inputLogos);
+            greetingOnce = bool(json, "greeting_once", greetingOnce);
+            homeIdleCalmSeconds = integer(json, "home_idle_calm_seconds", homeIdleCalmSeconds, 0, HOME_IDLE_CALM_MAX);
+            homeIdleDimSeconds = integer(json, "home_idle_dim_seconds", homeIdleDimSeconds, 0, HOME_IDLE_DIM_MAX);
+            homeIdleShift = bool(json, "home_idle_shift", homeIdleShift);
+            wallpaperCaptionSeconds = integer(json, "wallpaper_caption_seconds", wallpaperCaptionSeconds, 0, 600);
+            clockShiftSeconds = integer(json, "clock_shift_seconds", clockShiftSeconds, 15, 600);
+            clockDimAfterMinutes = integer(json, "clock_dim_after_minutes", clockDimAfterMinutes, 0, CLOCK_DIM_AFTER_MAX);
+            clockDimFloor = integer(json, "clock_dim_floor", clockDimFloor, 10, 100);
+            clockBlankAfterMinutes = integer(json, "clock_blank_after_minutes", clockBlankAfterMinutes, 0, CLOCK_BLANK_AFTER_MAX);
             glowStyle = string(json, "glow_style", glowStyle);
             glassStyle = string(json, "glass_style", glassStyle);
         }
@@ -701,6 +825,12 @@ final class Config {
         if (mounted) syncThemeChoices(choices, dir, file);
         int chosenColumns = choices.getInt("columns", columns);
         if (chosenColumns >= 4 && chosenColumns <= 7) columns = chosenColumns;
+        // Horizon: the dock's 5 or 6 tiles and the idle timings are chosen on the TV and survive a theme push.
+        columns = chosenDockTiles(choices.getInt(DOCK_TILES_KEY, -1), columns);
+        homeIdleCalmSeconds = chosenTiming(choices.getInt(HOME_IDLE_CALM_KEY, -1), homeIdleCalmSeconds, HOME_IDLE_CALM_MAX);
+        homeIdleDimSeconds = chosenTiming(choices.getInt(HOME_IDLE_DIM_KEY, -1), homeIdleDimSeconds, HOME_IDLE_DIM_MAX);
+        clockDimAfterMinutes = chosenTiming(choices.getInt(CLOCK_DIM_AFTER_KEY, -1), clockDimAfterMinutes, CLOCK_DIM_AFTER_MAX);
+        clockBlankAfterMinutes = chosenTiming(choices.getInt(CLOCK_BLANK_AFTER_KEY, -1), clockBlankAfterMinutes, CLOCK_BLANK_AFTER_MAX);
         int chosenRows = choices.getInt(ROWS_BELOW_DOCK_KEY, rowsBelow);
         if (chosenRows >= 0 && chosenRows <= 3) rowsBelow = chosenRows;
         animations = choices.getBoolean("animations", animations);
@@ -760,7 +890,10 @@ final class Config {
                 Math.max(0, Math.min(90, clockWallpaperDim)), clockGlow, glassStyle, singleRow && dockRow, dockBandAll, lunar, lunarOffset,
                 dateBelowClock, vpnPill, locale, powerOnHomeAlways, inputsConnectedOnly, inputsCecStateOnly,
                 Math.max(0, Math.min(600, openOnStartNetworkWait)), openOnStartOnWake, iconOnlyVpn, clockFormat, backOpensClock, glowSnap,
-                settingsKeyClearTask, quickPanel, quickPanelShortcuts, clockAerial, videos, videoMinutes);
+                settingsKeyClearTask, quickPanel, quickPanelShortcuts, clockAerial, videos, videoMinutes,
+                topShelf, topShelfScrim, focusParallax, focusSheen, inputTiles, inputTilesShowEmpty, packageMap(inputLogos), greetingOnce,
+                homeIdleCalmSeconds, homeIdleDimSeconds, homeIdleShift, wallpaperCaptionSeconds, clockShiftSeconds,
+                clockDimAfterMinutes, clockDimFloor, clockBlankAfterMinutes);
     }
 
     /**

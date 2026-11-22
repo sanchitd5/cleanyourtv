@@ -31,4 +31,9 @@ public class PackageMapTest {
     @Test public void aLaterEntryForAPackageWins() {
         assertEquals("second", Config.packageMap(Arrays.asList("a.pkg=first", "a.pkg=second")).get("a.pkg"));
     }
+
+    @Test public void anInputLogoEntryMapsItsKeyToItsFile() {
+        Map<String, String> m = Config.packageMap(Collections.singletonList("ps5=ps5.png"));
+        assertEquals("ps5.png", m.get("ps5"));
+    }
 }
