@@ -14,6 +14,7 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -32,6 +33,8 @@ public final class QuickSettingsActivity extends Activity {
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        Config cfg = Config.load(this);
+        Glass.configure(cfg);   // this activity can be the first of the process to run; the reduce-transparency row is read here too
         setContentView(R.layout.activity_quick_settings);
         if (getResources().getBoolean(R.bool.rtl_menu_bar)) {
             View panel = findViewById(R.id.panel);
@@ -45,7 +48,7 @@ public final class QuickSettingsActivity extends Activity {
         }
         findViewById(R.id.scrim).setOnClickListener(v -> finish());
         LinearLayout rows = findViewById(R.id.rows);
-        if (!addTiles(rows, Config.load(this).quickPanel)) {
+        if (!addTiles(rows, cfg.quickPanel)) {
             addRow(rows, R.drawable.ic_settings, R.string.tv_settings, 0, SystemSettings.intent(this, Settings.ACTION_SETTINGS));
             addRow(rows, R.drawable.ic_picture, R.string.quick_picture, 0, SystemSettings.displayIntent(this));
             addRow(rows, R.drawable.ic_wifi, R.string.quick_network, 0, SystemSettings.intent(this, Settings.ACTION_WIFI_SETTINGS));
@@ -54,6 +57,16 @@ public final class QuickSettingsActivity extends Activity {
             // Through Home, so it rebuilds with the new choices when Launcher settings closes.
             addRow(rows, R.drawable.ic_home_settings, R.string.launcher_settings, 0,
                     new Intent(this, MainActivity.class).setAction(MainActivity.ACTION_LAUNCHER_SETTINGS));
+        }
+        // Glass (19.6): over Home (GlassBackdrop.homeVisible, Home is only paused under this window) the pre-blurred backdrop;
+        // over an app or an HDMI input the fixed 78 % smoked tint (no cross-window blur on this TV); Solid with reduce
+        // transparency. homeHosted=false so the material follows homeVisible. No live sample is requested here: Home's own
+        // onPause already took one of the playing clip (MainActivity.onPause), and this Activity has no handle on the
+        // WallpaperPlayer, so the panel shows that frame, or the still's copy.
+        // TODO(G4): open and dismiss springs and highlight parallax: wire GlassMotionController-style calls on @id/panel here.
+        if (Glass.apply(findViewById(R.id.panel), GlassSurface.POPUP_RADIUS_DP, false)) {
+            Glass.rows(rows);
+            for (View tile : tiles) chip(tile, cfg);
         }
         rows.getChildAt(0).requestFocus();   // the first row, or the first tile of the first pair
     }
@@ -75,6 +88,24 @@ public final class QuickSettingsActivity extends Activity {
         super.onPause();
         finish();
         overridePendingTransition(0, 0);
+    }
+
+    private final List<View> tiles = new ArrayList<>();
+
+    /**
+     * A tile as a glass chip: faint fill at rest, the white capsule with dark ink when focused (Glass.rows has already set the
+     * ink), a 1.04 zoom on focus. The Picture, Sound and other tiles open the vendor's MediaTek activities; those screens are
+     * another app's and cannot be restyled from here.
+     */
+    private void chip(View tile, Config cfg) {
+        tile.setBackgroundResource(R.drawable.glass_tile_bg);
+        ((TextView) tile).setTypeface(UiFont.get(this, R.string.font_medium));   // follows a later font switch
+        final boolean animate = cfg.animations && !cfg.reducedMotion;
+        tile.setOnFocusChangeListener((v, focused) -> {
+            float scale = focused ? GlassMotion.CHIP_FOCUS_SCALE : 1f;
+            if (animate) v.animate().scaleX(scale).scaleY(scale).setDuration(120).start();
+            else { v.setScaleX(scale); v.setScaleY(scale); }
+        });
     }
 
     private void addRow(LinearLayout rows, int icon, int title, int status, Intent target) {
@@ -120,6 +151,7 @@ public final class QuickSettingsActivity extends Activity {
             view.setText(tile[0]);
             view.setSingleLine();
             opens(view, target);
+            tiles.add(view);
             if (pair == null || pair.getChildCount() > 1) rows.addView(pair = new LinearLayout(this));
             LinearLayout.LayoutParams size = new LinearLayout.LayoutParams((int) (150 * density), (int) (42 * density));
             size.setMargins(gap, gap, gap, gap);
