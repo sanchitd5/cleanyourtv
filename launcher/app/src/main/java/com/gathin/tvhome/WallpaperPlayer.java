@@ -76,6 +76,13 @@ final class WallpaperPlayer implements MediaPlayer.OnInfoListener, MediaPlayer.O
     private String playing = "";
     private long since;
     private static boolean logged;
+    /** wallpaper_caption_seconds: the caption fades out this long after it appears; 0 keeps it for as long as its picture shows. */
+    private final long captionMs;
+    private final Runnable fadeCaption = new Runnable() {
+        @Override public void run() {
+            if (caption != null) caption.animate().alpha(0f).setDuration(1200).start();
+        }
+    };
 
     WallpaperPlayer(Context context, FrameLayout root, Config config) {
         this.root = root;
@@ -86,6 +93,7 @@ final class WallpaperPlayer implements MediaPlayer.OnInfoListener, MediaPlayer.O
         // The dim is painted into the picture (decode), so no full-screen shade layer is drawn on every frame.
         dimColor = config.wallpaperDim > 0 ? (config.wallpaperDim * 255 / 100) << 24 : 0;
         videos = config.wallpaperVideos;
+        captionMs = config.wallpaperCaptionSeconds * 1000L;
         videoInterval = config.wallpaperVideoMinutes * 60_000L;
         order = config.wallpaperOrder;
         preferences = context.getSharedPreferences("wallpaper_rotation", Context.MODE_PRIVATE);
@@ -161,11 +169,29 @@ final class WallpaperPlayer implements MediaPlayer.OnInfoListener, MediaPlayer.O
         active = true;
         update();
         play();
+        // Back on Home: the current caption shows again for its seconds.
+        if (captionMs > 0) showCaption(false);
+    }
+
+    /** The caption view, or null when wallpaper_captions is off or there are no names. */
+    TextView caption() {
+        return caption;
+    }
+
+    /** The docked caption (top_shelf): 13 sp, on the shelf's meta line, at the strength the scrim is made for. */
+    void dockCaption() {
+        if (caption == null) return;
+        caption.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        caption.setTextColor(0xE6FFFFFF);
     }
 
     /** Home is paused: the clip stops on its frame, and goes on from there if Home was only covered by a panel. */
     void stop() {
         active = false;
+        if (caption != null && captionMs > 0) {
+            caption.removeCallbacks(fadeCaption);
+            caption.animate().cancel();
+        }
         if (video != null) video.pause();
     }
 
@@ -236,6 +262,9 @@ final class WallpaperPlayer implements MediaPlayer.OnInfoListener, MediaPlayer.O
         mp.setLooping(true);
         // Silent whatever the file holds; a clip is meant to have no sound track at all.
         mp.setVolume(0f, 0f);
+        // VideoView asks for the screen to stay on while a clip plays; Home must never hold it beyond the system timeout.
+        mp.setScreenOnWhilePlaying(false);
+        video.setKeepScreenOn(false);
         if (videoShown) return false;
         PersistableBundle stats = mp.getMetrics();
         String codec = stats == null ? null : stats.getString("android.media.mediaplayer.video.codec");
@@ -278,6 +307,7 @@ final class WallpaperPlayer implements MediaPlayer.OnInfoListener, MediaPlayer.O
     void close() {
         active = false;
         closed = true;
+        if (caption != null) caption.removeCallbacks(fadeCaption);
         release();
         decoder.shutdownNow();
     }
@@ -364,6 +394,12 @@ final class WallpaperPlayer implements MediaPlayer.OnInfoListener, MediaPlayer.O
     /** The displayed picture's name, faded across a change; a picture without a name hides the caption. */
     private void showCaption(boolean fade) {
         if (caption == null) return;
+        caption.removeCallbacks(fadeCaption);
+        showCaptionNow(fade);
+        if (captionMs > 0 && caption.getContentDescription() != null) caption.postDelayed(fadeCaption, captionMs + (fade ? 600 : 0));
+    }
+
+    private void showCaptionNow(boolean fade) {
         String name = names.get(videoShown ? playing : displayed);
         caption.animate().cancel();
         if (name == null) {

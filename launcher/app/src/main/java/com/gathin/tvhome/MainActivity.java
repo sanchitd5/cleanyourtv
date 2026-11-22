@@ -179,6 +179,14 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     /** config.xml glow_snap: the glow takes a new colour in one frame instead of the dip-and-fade. */
     private boolean glowSnap;
     private boolean heroShown;
+    /** top_shelf: typographic shelf with the two fixed scrims, the accent tick and the direction-aware swap. */
+    private boolean topShelf;
+    private boolean rtlGrid;
+    private int shelfPrevious = -1;
+    private GradientDrawable shelfTick;
+    /** Meta line for tiles that are not apps (input tiles); null until something supplies it. */
+    private ShelfMetaSource shelfMeta;
+    private HomeIdle homeIdle;
     private boolean animations;
     private boolean advancedEffects;
     private TextView greeting;
@@ -571,6 +579,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         cinematicWhiteFocus = cfg.cinematicWhiteFocus;
         heroArtAlpha = cfg.cinematicArt / 100f;
         if (cinematic) setUpCinematicShelf(cfg.cinematicScrim);
+        else if (cfg.topShelf) setUpTopShelf(cfg);
         // dock_title false: the name above the dock (and the cinematic lines under it) never shows; the glow
         // still follows the dock.
         if (!cfg.dockTitle) hero.setVisibility(View.GONE);
@@ -585,6 +594,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             greeting.setAlpha(0f);
             greeting.setVisibility(View.INVISIBLE);
         }
+        if (topShelf) strengthenHeaderInk(cfg);
         // Keep the other header layouts as designed: their extra lines change the block's centre.
         if (!cfg.showGreeting && !cfg.dateBelowClock && !cfg.shamsiDate && !cfg.lunarDate
                 && !cfg.topMenu && !getResources().getBoolean(R.bool.rtl_menu_bar)) {
@@ -653,6 +663,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         libraryExcludedApps = new HashSet<>(cfg.libraryExcludedApps);
 
         grid = findViewById(R.id.grid);
+        if (HomeIdle.wanted(cfg)) {
+            View header = (View) clockBlock.getParent();
+            Drawable ramp = findViewById(R.id.heroScrim).getBackground() instanceof android.graphics.drawable.LayerDrawable
+                    ? ((android.graphics.drawable.LayerDrawable) findViewById(R.id.heroScrim).getBackground()).getDrawable(0) : null;
+            homeIdle = new HomeIdle(cfg, density, reducedMotion, header, hero, grid, glass,
+                    topShelf ? wallpaperPlayer.caption() : null, ramp, 255, () -> heroShown);
+        }
         rtlAppGrid = getResources().getBoolean(R.bool.rtl_app_grid);
         // Mirror only the app grid; the header and other locales keep their own layouts.
         // single_row: one span laid out sideways, so the same adapter, glass and dock band serve a scrolling row.
@@ -1143,6 +1160,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             return;
         }
         restartIdleClock();
+        if (homeIdle != null) homeIdle.start();
         promptsPaused = false;
         if (grid.getAdapter() == null) grid.setAdapter(adapter);   // dropped by onTrimMemory
         switch (tileRefresh.onResume(packagesChangedSinceRebuild())) {
@@ -1165,7 +1183,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         updatePanel();
         // Back from an app opened from its tile, focus is still on that tile, so the cinematic "Last opened" line kept
         // the time from before this launch ("2 days ago" right after opening it). Refresh it.
-        if (cinematic && heroMeta != null && lastFocused >= 0 && lastFocused < adapter.appCount()) updateHeroMeta(lastFocused);
+        if ((cinematic || topShelf) && heroMeta != null && lastFocused >= 0 && lastFocused < adapter.appCount()) updateHeroMeta(lastFocused);
         // The network and Inputs pills keep their state while Home is in the background, and callbacks update them
         // when the network or the inputs change, so this refresh only catches anything missed. Its binder calls
         // (about 7 ms on a TCL C755, most of it WifiManager.getConnectionInfo) would hold up the first frame back
@@ -1336,7 +1354,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             return;
         }
         for (InputTiles.Tile t : now) {
-            if (t.visible && adapter.updateInputState(t.portId, t.state) && cinematic && heroMeta != null
+            if (t.visible && adapter.updateInputState(t.portId, t.state) && (cinematic || topShelf) && heroMeta != null
                     && lastFocused >= 0 && adapter.isInputAt(lastFocused)) {
                 updateHeroMeta(lastFocused);
             }
@@ -1366,6 +1384,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     public void onUserInteraction() {
         super.onUserInteraction();
         restartIdleClock();
+        if (homeIdle != null) homeIdle.poke();
     }
 
     private void restartIdleClock() {
@@ -1382,6 +1401,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         RemoteKeys.release(this);
         cancelHoldOk();
         root.removeCallbacks(showIdleClock);
+        if (homeIdle != null) homeIdle.stop();
         endReorder();   // Home or another app while reordering keeps the order so far
         handler.removeCallbacks(hideGreeting);
         handler.removeCallbacks(refreshInputTiles);
@@ -2021,6 +2041,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         float y = dockTopInRoot - 14 * density - 26 * density - hero.getHeight();
         boolean changed = !label.contentEquals(heroName.getText());
         if (cinematic && heroArtAlpha > 0f) showHeroArt(position);
+        // top_shelf: which way the text moves, and the caption docked on the meta line, against the shelf's place.
+        int dir = topShelf ? FocusMotion.shelfDir(shelfPrevious, position, rtlGrid) : 0;
+        shelfPrevious = position;
+        if (topShelf) dockCaption(y);
+        float slide = (topShelf ? 10 : 12) * density;
 
         if (!animations || reducedMotion) {
             // Snap the shelf instead of sliding and fading it: each of those frames repaints the
@@ -2054,10 +2079,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             heroShown = true;
         } else if (changed) {
             if (advancedEffects) hero.animate().cancel();
-            hero.animate().alpha(0f).translationX(-12 * density).setDuration(120).withEndAction(() -> {
+            final int sign = topShelf ? (dir == 0 ? 1 : dir) : 1;
+            hero.animate().alpha(0f).translationX(-sign * slide).setDuration(topShelf ? 110 : 120).withEndAction(() -> {
                 fillHero(position, label);
                 hero.setY(y);
-                hero.setTranslationX(12 * density);
+                hero.setTranslationX(sign * slide);
                 hero.animate().alpha(1f).translationX(0f).setDuration(200).start();
             }).start();
             if (ambientGlow && advancedEffects) {
@@ -2086,9 +2112,58 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     /** The shelf's text for this dock app: its name and, on the cinematic shelf, "Last opened" and the dots. */
     private void fillHero(int position, String label) {
         heroName.setText(label);
+        if (topShelf) {
+            shelfTick.setTint(Accent.legible(adapter.ambientColorAt(position)));
+            updateHeroMeta(position);
+            return;
+        }
         if (!cinematic) return;
         updateHeroMeta(position);
         updateHeroDots(position);
+    }
+
+    /** Whatever supplies the shelf's meta line for non-app tiles (the input tiles) plugs in here. */
+    void setShelfMetaSource(ShelfMetaSource source) {
+        shelfMeta = source;
+    }
+
+    /** top_shelf: the scrim, the 3 x 12 dp accent tick in front of the meta line, 13 sp caption. Not with cinematic_home. */
+    private void setUpTopShelf(Config cfg) {
+        topShelf = true;
+        rtlGrid = getResources().getBoolean(R.bool.rtl_menu_bar);
+        heroMeta.setVisibility(View.INVISIBLE);   // keeps its height, so the title does not jump when it fills in
+        heroMeta.setTextColor(0xE6FFFFFF);
+        heroMeta.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
+        heroMeta.setLetterSpacing(0.01f);
+        heroMeta.setCompoundDrawablePadding((int) (8 * density));
+        shelfTick = new GradientDrawable();
+        shelfTick.setCornerRadius(1.5f * density);
+        shelfTick.setSize((int) (3 * density), (int) (12 * density));
+        shelfTick.setTint(0xFFFFFFFF);
+        heroMeta.setCompoundDrawablesRelative(shelfTick, null, null, null);
+        heroName.setTextColor(0xFFF5F7FA);
+        View scrim = findViewById(R.id.heroScrim);
+        if (cfg.topShelfScrim > 0) {
+            scrim.setBackground(ShelfScrim.drawable(getResources(), cfg.topShelfScrim, rtlGrid));
+            scrim.setVisibility(View.VISIBLE);
+        }
+        wallpaperPlayer.dockCaption();
+    }
+
+    /** The date and the greeting at 90 % ink (the 65 and 75 % they have need a scrim no gradient should be) on top of the scrim. */
+    private void strengthenHeaderInk(Config cfg) {
+        ((TextView) findViewById(R.id.date)).setTextColor(0xE6FFFFFF);
+        greeting.setTextColor(0xE6FFFFFF);
+        greetingColor = 0xE6FFFFFF;
+    }
+
+    /** The caption sits on the meta line at the right: its bottom on the shelf's bottom, with its shadow padding. */
+    private void dockCaption(float heroY) {
+        TextView caption = wallpaperPlayer.caption();
+        if (caption == null || hero.getHeight() == 0) return;
+        float pad = caption.getPaddingBottom();
+        caption.setTranslationY(0f);
+        caption.setY(heroY + hero.getHeight() - caption.getHeight() + pad);
     }
 
     // ---- cinematic shelf -------------------------------------------------------------------------
@@ -2177,6 +2252,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             int at = state == null ? -1 : portLine.lastIndexOf(state);
             if (at >= 0) line.setSpan(new ForegroundColorSpan(0xFFFFFFFF), at, at + state.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
             heroMeta.setText(line);
+            heroMeta.setVisibility(View.VISIBLE);
+            return;
+        }
+        CharSequence supplied = topShelf && shelfMeta != null ? shelfMeta.metaAt(position) : null;
+        if (supplied != null) {
+            heroMeta.setText(supplied);
             heroMeta.setVisibility(View.VISIBLE);
             return;
         }
