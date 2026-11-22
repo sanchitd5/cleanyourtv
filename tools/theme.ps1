@@ -124,9 +124,16 @@ function DropClips($keep) { "for f in $dir/wallpapers/*.[mM][pP]4; do [ -e `"`$f
 # input_logos' pictures (inputs/*), as in theme.sh: the names in $keep stay, all of them for an empty $keep.
 function DropInputs($keep) { "for f in $dir/inputs/*; do [ -e `"`$f`" ] || continue; case `" $keep `" in *`" `${f##*/} `"*) ;; *) rm -f `"`$f`" 2>/dev/null; content delete --uri $uri/inputs/`${f##*/} 2>/dev/null ;; esac; done" }
 
+# --- screensaver_wallpapers: the theme folder of stills the clock screensaver shows (h-guard), as in theme.sh ---
+# A still the TV already has at the same size is left alone and one the theme no longer has is deleted;
+# $ssDefault is the folder -Reset and a theme without the key clean.
+$ssDefault = 'screensaver'
+function DropStills($folder, $keep) { "for f in $dir/$folder/*; do [ -e `"`$f`" ] || continue; case `" $keep `" in *`" `${f##*/} `"*) ;; *) rm -f `"`$f`" 2>/dev/null; content delete --uri $uri/$folder/`${f##*/} 2>/dev/null ;; esac; done" }
+# --- end screensaver_wallpapers ---
+
 if ($Reset) {
     $checkPut = $true
-    Invoke-Tv tv.py "mkdir -p $dir 2>/dev/null; $(Drop 'config.json'); $(Drop 'wallpaper.jpg'); $(Drop 'wallpapers/captions.txt'); $clearWallpapers; $(DropClips ''); $(DropInputs ''); printf '%s' '$revision' > $tmp-theme_revision; $(Put 'theme_revision')" | Out-Null
+    Invoke-Tv tv.py "mkdir -p $dir 2>/dev/null; $(Drop 'config.json'); $(Drop 'wallpaper.jpg'); $(Drop 'wallpapers/captions.txt'); $clearWallpapers; $(DropClips ''); $(DropInputs ''); $(DropStills $ssDefault ''); printf '%s' '$revision' > $tmp-theme_revision; $(Put 'theme_revision')" | Out-Null
     & $py -I theme_restart.py
     if ($LASTEXITCODE) { throw 'Home restart recovery failed' }
     Write-Host 'reset'
@@ -181,6 +188,22 @@ if (Test-Path -LiteralPath $inputsDir -PathType Container) {
     }
 }
 
+# --- screensaver_wallpapers: the folder's name and file names, checked before anything is sent (h-guard) ---
+$ssFolder = ''
+$ssImages = @()
+$ssName = $themeJson.screensaver_wallpapers
+if ($ssName -is [string] -and $ssName -ceq 'screensaver') { $ssFolder = $ssName }   # the one folder ThemeProvider takes
+if ($ssFolder -and (Test-Path -LiteralPath (Join-Path $Theme $ssFolder) -PathType Container)) {
+    $ssImages = @(Get-ChildItem -LiteralPath (Join-Path $Theme $ssFolder) -File | Where-Object { $_.Extension -match '^\.(jpg|jpeg|png|webp)$' })
+    foreach ($image in $ssImages) {
+        if ($image.Name -notmatch '^[A-Za-z0-9_.-]+$' -or $image.Name.Contains('..')) {
+            [Console]::Error.WriteLine("unsupported screensaver filename: $($image.Name) (letters, digits, '.', '_' and '-', with no '..'). Nothing was sent to the TV.")
+            exit 2
+        }
+    }
+}
+# --- end screensaver_wallpapers ---
+
 # Tolerated, as in theme.sh: a TV that locks Android/data still takes the files through ThemeProvider.
 Invoke-Tv tv.py "mkdir -p $dir 2>/dev/null; true" | Out-Null
 Invoke-Tv tv.py --push $config "$tmp-config.json" | Out-Null
@@ -222,6 +245,24 @@ foreach ($input in $inputs) {
     Invoke-Tv b64push.py $input.FullName (Stage $name)
     Invoke-Tv tv.py (Put $name) | Out-Null
 }
+# --- screensaver_wallpapers: push the folder (h-guard) ---
+$ssCaptions = if ($ssFolder) { Join-Path (Join-Path $Theme $ssFolder) 'captions.txt' } else { '' }
+$ssHasCaptions = $ssCaptions -and (Test-Path -LiteralPath $ssCaptions -PathType Leaf)
+$ssKeep = (@($ssImages | ForEach-Object { $_.Name }) + $(if ($ssHasCaptions) { 'captions.txt' } else { @() })) -join ' '
+$ssTarget = if ($ssFolder) { $ssFolder } else { $ssDefault }
+Invoke-Tv tv.py (DropStills $ssTarget $ssKeep) | Out-Null
+foreach ($image in $ssImages) {
+    $name = "$ssFolder/$($image.Name)"
+    $onTv = (@(Invoke-Tv tv.py "{ [ -e $dir/$name ] && wc -c < $dir/$name; } 2>/dev/null || content read --uri $uri/$name 2>/dev/null | wc -c") -join '').Trim()
+    if ($onTv -eq "$($image.Length)") { Write-Host "$name is already on the TV"; continue }
+    Invoke-Tv b64push.py $image.FullName (Stage $name)
+    Invoke-Tv tv.py (Put $name) | Out-Null
+}
+if ($ssHasCaptions) {
+    Invoke-Tv b64push.py $ssCaptions (Stage "$ssFolder/captions.txt")
+    Invoke-Tv tv.py (Put "$ssFolder/captions.txt") | Out-Null
+}
+# --- end screensaver_wallpapers ---
 Invoke-Tv tv.py "printf '%s' '$revision' > $tmp-theme_revision; $(Put 'theme_revision')" | Out-Null
 & $py -I theme_restart.py
 if ($LASTEXITCODE) { throw 'Home restart recovery failed' }
