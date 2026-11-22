@@ -180,6 +180,7 @@
     <string name="photos_folder">תיקיית שומר המסך</string>
     <string name="photos_empty"> (ריקה)</string>
     <string name="reduced_motion_label">תנועה מופחתת</string>
+    <string name="watermark_label">סימן מים</string>
     <string name="timing_percent">%1$d %%</string>
     <string name="level_low">נמוכה</string>
     <string name="level_medium">בינונית</string>

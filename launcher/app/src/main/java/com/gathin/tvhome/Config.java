@@ -351,6 +351,26 @@ final class Config {
     static final String REDUCE_TRANSPARENCY_KEY = "glass_reduce_transparency";
 
     /** A known input_group (any case, trimmed), or off for anything else. */
+    // watermark: a credit line on Home (theme watermark; the on-TV row only hides it).
+    /** The Home credit line, already cleaned; empty is none. The text is only ever the theme's. */
+    final String watermark;
+    static final String WATERMARK_SHOW_KEY = "watermark_show";
+    static final int WATERMARK_MAX = 60;
+
+    /** Trimmed, control characters stripped, at most 60 characters (code points); null is empty. */
+    static String cleanWatermark(String raw) {
+        if (raw == null) return "";
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < raw.length(); ) {
+            int cp = raw.codePointAt(i);
+            i += Character.charCount(cp);
+            if (!Character.isISOControl(cp)) sb.appendCodePoint(cp);
+        }
+        String s = sb.toString().trim();
+        if (s.codePointCount(0, s.length()) > WATERMARK_MAX) s = s.substring(0, s.offsetByCodePoints(0, WATERMARK_MAX)).trim();
+        return s;
+    }
+
     static String inputGroup(String value) {
         if (value == null) return INPUT_GROUP_OFF;
         String v = value.trim();
@@ -411,7 +431,7 @@ final class Config {
             CLOCK_BLANK_AFTER_KEY, TOP_SHELF_KEY, TOP_SHELF_SCRIM_KEY, INPUT_TILES_KEY, INPUT_TILES_EMPTY_KEY,
             GREETING_MODE_KEY, FOCUS_PARALLAX_KEY, FOCUS_SHEEN_KEY, WALLPAPER_VIDEO_KEY, VIDEO_MINUTES_KEY,
             CAPTION_SECONDS_KEY, HOME_IDLE_SHIFT_KEY, REDUCED_MOTION_KEY, SCREENSAVER_PHOTOS_KEY,
-            REDUCE_TRANSPARENCY_KEY};
+            REDUCE_TRANSPARENCY_KEY, WATERMARK_SHOW_KEY};
 
     /** A switch chosen on the TV: 1 is On, 0 is Off, anything else (absent is -1) leaves the theme's value. */
     static boolean chosenSwitch(int chosen, boolean theme) {
@@ -477,7 +497,7 @@ final class Config {
                    boolean topShelf, int topShelfScrim, int focusParallax, boolean focusSheen, boolean inputTiles, boolean inputTilesShowEmpty,
                    Map<String, String> inputLogos, boolean greetingOnce, int homeIdleCalmSeconds, int homeIdleDimSeconds, boolean homeIdleShift,
                    int wallpaperCaptionSeconds, int clockShiftSeconds, int clockDimAfterMinutes, int clockDimFloor, int clockBlankAfterMinutes,
-                   boolean glassSurfaces, boolean glassLiveBackdrop, boolean glassReduceTransparency, String inputGroup) {
+                   boolean glassSurfaces, boolean glassLiveBackdrop, boolean glassReduceTransparency, String inputGroup, String watermark) {
         this.handleViewInputs = handleViewInputs;
         this.tileMenu = tileMenu;
         this.inputKeycodes = inputKeycodes;
@@ -619,6 +639,7 @@ final class Config {
         this.glassLiveBackdrop = glassLiveBackdrop;
         this.glassReduceTransparency = glassReduceTransparency;
         this.inputGroup = inputGroup(inputGroup);
+        this.watermark = cleanWatermark(watermark);   // watermark
         this.glowStyle = glowStyle(glowStyle);
         this.wallpaperCaptions = wallpaperCaptions;
         this.glassStyle = glassStyle(glassStyle);
@@ -777,6 +798,7 @@ final class Config {
         boolean glassLiveBackdrop = false;
         boolean glassReduceTransparency = false;
         String inputGroup = INPUT_GROUP_OFF;
+        String watermark = "";   // watermark
         boolean applied = false;
 
         File dir = dir(ctx);
@@ -916,6 +938,7 @@ final class Config {
             glassLiveBackdrop = bool(json, "glass_live_backdrop", glassLiveBackdrop);
             glassReduceTransparency = bool(json, "glass_reduce_transparency", glassReduceTransparency);
             inputGroup = string(json, "input_group", inputGroup);
+            watermark = cleanWatermark(string(json, "watermark", watermark));   // watermark
             glowStyle = string(json, "glow_style", glowStyle);
             glassStyle = string(json, "glass_style", glassStyle);
         }
@@ -947,6 +970,7 @@ final class Config {
         wallpaperCaptionSeconds = chosenTiming(choices.getInt(CAPTION_SECONDS_KEY, -1), wallpaperCaptionSeconds, 600);
         reducedMotion = chosenSwitch(choices.getInt(REDUCED_MOTION_KEY, -1), reducedMotion);
         glassReduceTransparency = chosenSwitch(choices.getInt(REDUCE_TRANSPARENCY_KEY, -1), glassReduceTransparency);
+        if (!chosenSwitch(choices.getInt(WATERMARK_SHOW_KEY, -1), true)) watermark = "";   // watermark: hidden on the TV
         int chosenRows = choices.getInt(ROWS_BELOW_DOCK_KEY, rowsBelow);
         if (chosenRows >= 0 && chosenRows <= 3) rowsBelow = chosenRows;
         animations = choices.getBoolean("animations", animations);
@@ -1011,7 +1035,7 @@ final class Config {
                 topShelf, topShelfScrim, focusParallax, focusSheen, inputTiles, inputTilesShowEmpty, packageMap(inputLogos), greetingOnce,
                 homeIdleCalmSeconds, homeIdleDimSeconds, homeIdleShift, wallpaperCaptionSeconds, clockShiftSeconds,
                 clockDimAfterMinutes, clockDimFloor, clockBlankAfterMinutes,
-                glassSurfaces, glassLiveBackdrop, glassReduceTransparency, inputGroup);
+                glassSurfaces, glassLiveBackdrop, glassReduceTransparency, inputGroup, watermark);
     }
 
     /**
