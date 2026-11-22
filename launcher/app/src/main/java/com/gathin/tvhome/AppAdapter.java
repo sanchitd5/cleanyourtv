@@ -16,6 +16,7 @@ import android.graphics.PixelFormat;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
+import android.media.tv.TvInputManager;
 import android.net.Uri;
 import android.provider.Settings;
 import android.util.DisplayMetrics;
@@ -64,7 +65,7 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     }
 
     static final class Entry {
-        static final int APP = 0, HOME_SETTINGS = 1, CARD = 2, EMPTY = 3;
+        static final int APP = 0, HOME_SETTINGS = 1, CARD = 2, EMPTY = 3, INPUT = 4;
 
         final int kind;
         final String label;
@@ -78,6 +79,13 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         int ambient;
         /** uniform_tiles card fill, top and bottom colour; null until sampled from the icon. */
         int[] backdrop;
+        /** INPUT only: the TV input a press opens, the INPUT_STATE_* now, the device kind and the shelf's meta line. */
+        String inputId, inputKind, meta, metaPort;
+        int inputState = -1;
+        /** INPUT only: glyph and wordmark alpha, 1 connected, 0.70 standby or unknown, 0.45 a kept empty port. */
+        float inputAlpha = 1f;
+        /** INPUT only: the port has no CEC device. */
+        boolean inputEmpty;
 
         Entry(String label, ComponentName component, Drawable banner, Drawable icon) {
             this(APP, label, component, banner, icon, null, 0);
@@ -261,6 +269,10 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
      * so focus follows it); hidden_apps wins over a card, and a card's package in dock_apps takes that slot.
      */
     void reload(List<Cards.Card> cards, List<ResolveInfo> leanback) {
+        reload(cards, leanback, Collections.emptyList());
+    }
+
+    void reload(List<Cards.Card> cards, List<ResolveInfo> leanback, List<InputTiles.Tile> inputs) {
         PackageManager pm = ctx.getPackageManager();
         // The LEANBACK query is shared with the module-card check (MainActivity); copy it before adding
         // library apps so the caller's list stays as it was.
@@ -314,6 +326,9 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
                 fresh.add(new Entry(label, component, banner, icon));
             }
         }
+        for (InputTiles.Tile tile : inputs) {
+            if (tile.visible) fresh.add(inputEntry(tile));
+        }
         Collections.sort(fresh, (a, b) -> {
             // The owner's own order first; tiles it does not know (new installs) follow by the rule below.
             int saved = Order.compare(savedRanks, a.component.flattenToShortString(), b.component.flattenToShortString());
@@ -325,7 +340,7 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
                 return Integer.compare(fa, fb);
             }
             // Cards come right after the configured dock apps, before the alphabetical grid.
-            boolean ca = a.kind == Entry.CARD, cb = b.kind == Entry.CARD;
+            boolean ca = a.kind == Entry.CARD || a.kind == Entry.INPUT, cb = b.kind == Entry.CARD || b.kind == Entry.INPUT;
             if (ca != cb) return ca ? -1 : 1;
             return a.label.compareToIgnoreCase(b.label);
         });
@@ -346,6 +361,70 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         items.clear();
         items.addAll(fresh);
         notifyDataSetChanged();
+    }
+
+    /**
+     * An HDMI input as a tile. Its component is the input key with a fixed class, so pkg is "input:<port id>": that is
+     * what dock_apps names and what Order saves. Never hand pkg of an INPUT entry to PackageManager.
+     */
+    private Entry inputEntry(InputTiles.Tile t) {
+        String kind = t.device != null ? t.device.kind : InputDevices.HDMI;
+        Drawable banner = t.logoFile == null ? null : InputTileSource.logoBanner(ctx, t.logoFile, kind);
+        Drawable icon = banner != null ? null : ctx.getDrawable(glyph(kind));
+        Entry e = new Entry(Entry.INPUT, t.name, new ComponentName(InputTiles.key(t.portId), "tile"), banner, icon,
+                null, InputTiles.kindAccent(kind));
+        e.inputId = t.launchId;
+        e.inputKind = kind;
+        e.inputEmpty = t.launchId.equals(t.portId);
+        e.metaPort = t.portName;
+        applyInputState(e, t.state);
+        return e;
+    }
+
+    private void applyInputState(Entry e, int state) {
+        e.inputState = state;
+        boolean connected = state == TvInputManager.INPUT_STATE_CONNECTED;
+        e.inputAlpha = connected ? 1f : e.inputEmpty ? 0.45f : 0.70f;
+        String text = connected ? ctx.getString(R.string.connected)
+                : state == TvInputManager.INPUT_STATE_DISCONNECTED ? ctx.getString(R.string.not_connected)
+                : state == TvInputManager.INPUT_STATE_CONNECTED_STANDBY ? ctx.getString(R.string.standby) : null;
+        e.meta = InputTiles.meta(e.metaPort, text);
+    }
+
+    private static int glyph(String kind) {
+        if (InputDevices.CONSOLE.equals(kind)) return R.drawable.ic_input_console;
+        if (InputDevices.STREAMER.equals(kind)) return R.drawable.ic_input_streamer;
+        if (InputDevices.STB.equals(kind)) return R.drawable.ic_input_stb;
+        if (InputDevices.PC.equals(kind)) return R.drawable.ic_input_pc;
+        return R.drawable.ic_input;
+    }
+
+    /** A new connection state for one input tile (by port id): rebinds that tile only. True when the tile is shown. */
+    boolean updateInputState(String portId, int state) {
+        int pos = positionOf(new ComponentName(InputTiles.key(portId), "tile").flattenToShortString());
+        if (pos < 0 || items.get(pos).kind != Entry.INPUT) return false;
+        Entry e = items.get(pos);
+        if (e.inputState != state) {
+            applyInputState(e, state);
+            notifyItemChanged(pos);
+        }
+        return true;
+    }
+
+    boolean isInputAt(int position) {
+        return position >= 0 && position < items.size() && items.get(position).kind == Entry.INPUT;
+    }
+
+    /** The shelf's meta line for an input tile ("HDMI 1 · Connected"), else null. */
+    String metaAt(int position) {
+        return isInputAt(position) ? items.get(position).meta : null;
+    }
+
+    /** The state word at the end of metaAt's line, for colouring; null when the line is the port alone. */
+    String metaStateAt(int position) {
+        if (!isInputAt(position)) return null;
+        Entry e = items.get(position);
+        return e.meta != null && e.meta.length() > e.metaPort.length() ? e.meta.substring(e.metaPort.length() + 3) : null;
     }
 
     /** icon_tiles: the app's icon centred on a dark banner-shaped tile, for apps whose own banner crops badly. */
@@ -496,7 +575,16 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         // A fully opaque banner covers the whole card (centerCrop), so the card's own fill under it is drawn for
         // nothing on every frame; keep it under banners with transparent parts and under icon tiles.
         h.card.setBackground(e.banner != null && e.banner.getOpacity() == PixelFormat.OPAQUE ? null : h.cardBackground);
-        if (uniformTiles && e.banner == null) {
+        // Holders are recycled: whatever an input tile set is put back for every other kind.
+        boolean input = e.kind == Entry.INPUT;
+        h.dot.setVisibility(input && e.inputState == TvInputManager.INPUT_STATE_CONNECTED ? View.VISIBLE : View.GONE);
+        h.icon.setAlpha(input ? e.inputAlpha : 1f);
+        h.label.setAlpha(input ? e.inputAlpha : 1f);
+        if (input && e.banner == null) {
+            h.card.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                    InputTiles.kindBackdrop(e.inputKind)));
+        }
+        if (uniformTiles && e.banner == null && !input) {
             if (e.backdrop == null) e.backdrop = backdrop(e.icon, ambientColorAt(position));
             h.card.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, e.backdrop));
         }
@@ -512,10 +600,11 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
             h.icon.setImageDrawable(e.icon);
             h.icon.setVisibility(View.VISIBLE);
             h.label.setText(e.label);
-            h.label.setVisibility(uniformTiles ? View.GONE : View.VISIBLE);
+            h.label.setVisibility(uniformTiles && !input ? View.GONE : View.VISIBLE);
         }
         h.card.setOnClickListener(v -> launch(e));
         h.card.setOnLongClickListener(v -> {
+            if (input && !tileMenu) return true;   // no App info page for a port
             if (tileMenu) {
                 int pos = h.getBindingAdapterPosition();
                 if (pos != RecyclerView.NO_POSITION) listener.onTileLongPress(pos, v);
@@ -534,6 +623,11 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     /** Opens the tile's activity by explicit component, with no extras: a card can name nothing else. */
     @SuppressWarnings("deprecation")
     private void launch(Entry e) {
+        if (e.kind == Entry.INPUT) {
+            listener.onOpenInput(e.inputId);
+            if (cinematic) LastOpened.record(ctx, e.pkg);
+            return;
+        }
         if (e.kind == Entry.HOME_SETTINGS) {
             ctx.startActivity(new Intent(ctx, HomeSettingsActivity.class)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
@@ -912,6 +1006,7 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         final ImageView banner;
         final ImageView icon;
         final TextView label;
+        final View dot;
         final TextView name;
         final boolean animations;
         final boolean advancedEffects;
@@ -932,6 +1027,7 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
             banner = v.findViewById(R.id.banner);
             icon = v.findViewById(R.id.icon);
             label = v.findViewById(R.id.label);
+            dot = v.findViewById(R.id.dot);
             name = v.findViewById(R.id.name);
             this.animations = animations;
             this.advancedEffects = advancedEffects;

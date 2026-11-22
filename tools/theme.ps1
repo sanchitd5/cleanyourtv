@@ -1,5 +1,5 @@
 # Windows version of theme.sh: push a theme folder (config.json, and optionally a wallpaper.jpg or a
-# wallpapers/ collection) to the launcher on the TV and restart Home. See themes/README.md for the keys.
+# wallpapers/ collection, or an inputs/ folder of device logos) to the launcher on the TV and restart Home. See themes/README.md for the keys.
 #
 # Usage: tools\theme.ps1 -TvHost 192.168.1.50 themes\aurora
 #        tools\theme.ps1 -TvHost 192.168.1.50 -Reset
@@ -121,10 +121,12 @@ $clearWallpapers = "rm -f $dir/wallpapers/*.[jJ][pP][gG] $dir/wallpapers/*.[jJ][
 # so a push leaves the ones the theme still has, at the same size, where they are. This removes the others - the
 # names in $keep stay, so all of them for an empty $keep, which is what -Reset and a theme without clips ask for.
 function DropClips($keep) { "for f in $dir/wallpapers/*.[mM][pP]4; do [ -e `"`$f`" ] || continue; case `" $keep `" in *`" `${f##*/} `"*) ;; *) rm -f `"`$f`" 2>/dev/null; content delete --uri $uri/wallpapers/`${f##*/} 2>/dev/null ;; esac; done" }
+# input_logos' pictures (inputs/*), as in theme.sh: the names in $keep stay, all of them for an empty $keep.
+function DropInputs($keep) { "for f in $dir/inputs/*; do [ -e `"`$f`" ] || continue; case `" $keep `" in *`" `${f##*/} `"*) ;; *) rm -f `"`$f`" 2>/dev/null; content delete --uri $uri/inputs/`${f##*/} 2>/dev/null ;; esac; done" }
 
 if ($Reset) {
     $checkPut = $true
-    Invoke-Tv tv.py "mkdir -p $dir 2>/dev/null; $(Drop 'config.json'); $(Drop 'wallpaper.jpg'); $(Drop 'wallpapers/captions.txt'); $clearWallpapers; $(DropClips ''); printf '%s' '$revision' > $tmp-theme_revision; $(Put 'theme_revision')" | Out-Null
+    Invoke-Tv tv.py "mkdir -p $dir 2>/dev/null; $(Drop 'config.json'); $(Drop 'wallpaper.jpg'); $(Drop 'wallpapers/captions.txt'); $clearWallpapers; $(DropClips ''); $(DropInputs ''); printf '%s' '$revision' > $tmp-theme_revision; $(Put 'theme_revision')" | Out-Null
     & $py -I theme_restart.py
     if ($LASTEXITCODE) { throw 'Home restart recovery failed' }
     Write-Host 'reset'
@@ -166,6 +168,18 @@ if (Test-Path -LiteralPath $wallpapers -PathType Container) {
         }
     }
 }
+# inputs/ (input_logos): pictures only, named by the same rule as a wallpaper and not starting with a dot.
+$inputs = @()
+$inputsDir = Join-Path $Theme 'inputs'
+if (Test-Path -LiteralPath $inputsDir -PathType Container) {
+    $inputs = @(Get-ChildItem -LiteralPath $inputsDir -File | Where-Object { $_.Extension -match '^\.(jpg|jpeg|png|webp)$' })
+    foreach ($input in $inputs) {
+        if ($input.Name -notmatch '^[A-Za-z0-9_.-]+$' -or $input.Name.Contains('..') -or $input.Name.StartsWith('.')) {
+            [Console]::Error.WriteLine("unsupported inputs filename: $($input.Name) (b64push.py takes letters, digits, '.', '_' and '-', with no '..' in the name and no leading '.'). Nothing was sent to the TV.")
+            exit 2
+        }
+    }
+}
 
 # Tolerated, as in theme.sh: a TV that locks Android/data still takes the files through ThemeProvider.
 Invoke-Tv tv.py "mkdir -p $dir 2>/dev/null; true" | Out-Null
@@ -196,6 +210,16 @@ foreach ($clip in $clips) {
     $onTv = (@(Invoke-Tv tv.py "{ [ -e $dir/$name ] && wc -c < $dir/$name; } 2>/dev/null || content read --uri $uri/$name 2>/dev/null | wc -c") -join '').Trim()
     if ($onTv -eq "$($clip.Length)") { Write-Host "$name is already on the TV"; continue }
     if ($env:TV_ADB_BINARY) { Invoke-Tv tv.py --push $clip.FullName (Stage $name) | Out-Null } else { Invoke-Tv b64push.py $clip.FullName (Stage $name) }
+    Invoke-Tv tv.py (Put $name) | Out-Null
+}
+# input_logos' pictures: the ones the theme no longer has go, and one the TV already has with the same MD5 is left alone.
+Invoke-Tv tv.py (DropInputs (@($inputs | ForEach-Object { $_.Name }) -join ' ')) | Out-Null
+foreach ($input in $inputs) {
+    $name = "inputs/$($input.Name)"
+    $sum = (Get-FileHash -LiteralPath $input.FullName -Algorithm MD5).Hash.ToLower()
+    $onTv = ((@(Invoke-Tv tv.py "{ [ -e $dir/$name ] && md5sum < $dir/$name; } 2>/dev/null || content read --uri $uri/$name 2>/dev/null | md5sum") -join '').Trim() -split '\s+')[0]
+    if ($onTv -eq $sum) { Write-Host "$name is already on the TV"; continue }
+    Invoke-Tv b64push.py $input.FullName (Stage $name)
     Invoke-Tv tv.py (Put $name) | Out-Null
 }
 Invoke-Tv tv.py "printf '%s' '$revision' > $tmp-theme_revision; $(Put 'theme_revision')" | Out-Null

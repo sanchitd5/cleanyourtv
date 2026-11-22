@@ -182,6 +182,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private boolean animations;
     private boolean advancedEffects;
     private TextView greeting;
+    /** greeting_once: the greeting shows for GREETING_HOLD_MS once per part of the day (HOME-DESIGN.md 4.7). */
+    private boolean greetingOnce;
+    private static final long GREETING_HOLD_MS = 8_000;
+    private final Runnable hideGreeting = this::fadeOutGreeting;
     private View clockBlock;
     private View btnInputs;
     /** config show_inputs_pill: false keeps the Inputs pill hidden even when the TV has inputs. */
@@ -395,13 +399,36 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         @Override
         public void onInputAdded(String inputId) {
             updateInputsButton();
+            scheduleInputTiles();
         }
 
         @Override
         public void onInputRemoved(String inputId) {
             updateInputsButton();
+            scheduleInputTiles();
+        }
+
+        @Override
+        public void onInputUpdated(String inputId) {
+            scheduleInputTiles();
+        }
+
+        @Override
+        public void onInputStateChanged(String inputId, int state) {
+            scheduleInputTiles();
+        }
+
+        @Override
+        public void onTvInputInfoUpdated(TvInputInfo info) {
+            scheduleInputTiles();
         }
     };
+    /** input_tiles (HOME-DESIGN.md 5): null when off. Detection and the remembered devices live there. */
+    private InputTileSource inputTileSource;
+    /** InputTiles.signature of the tiles on screen: a change rebuilds them, a change of state alone rebinds one. */
+    private String inputTileSignature = "";
+    /** One check per burst: CEC devices arrive together at boot and on wake. */
+    private final Runnable refreshInputTiles = this::refreshInputTilesNow;
     /** Listens for any VPN coming up or going down, even one this app's traffic is excluded from. */
     private final ConnectivityManager.NetworkCallback vpnCallback = new ConnectivityManager.NetworkCallback() {
         @Override
@@ -552,6 +579,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         clockRefresh = new ClockRefresh(clockBlock);
         greetingColor = greeting.getCurrentTextColor();
         if (!cfg.showGreeting) greeting.setVisibility(View.GONE);
+        greetingOnce = cfg.showGreeting && cfg.greetingOnce;
+        // greeting_once: the line keeps its height (INVISIBLE) so the header never reflows when it fades.
+        if (greetingOnce) {
+            greeting.setAlpha(0f);
+            greeting.setVisibility(View.INVISIBLE);
+        }
         // Keep the other header layouts as designed: their extra lines change the block's centre.
         if (!cfg.showGreeting && !cfg.dateBelowClock && !cfg.shamsiDate && !cfg.lunarDate
                 && !cfg.topMenu && !getResources().getBoolean(R.bool.rtl_menu_bar)) {
@@ -701,6 +734,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                     AnimationUtils.loadAnimation(this, R.anim.tile_enter), 0.06f));
         }
         adapter = new AppAdapter(this, this, COLUMNS, cfg);
+        if (cfg.inputTiles) inputTileSource = new InputTileSource(this, cfg);
         dockApps = cfg.dockApps;
         fillDockLeavesSlots = !cfg.fillDock;
         Order savedOrder = Order.load(Order.file(this));
@@ -1124,6 +1158,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             default:
                 break;
         }
+        // Callbacks can be missed while the process was cached: look at the inputs once more.
+        if (inputTileSource != null) handler.post(refreshInputTiles);
         if (openLiveTvAfterBoot()) return;
         updateGreeting();
         updatePanel();
@@ -1272,10 +1308,39 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER), 0);
         cards = moduleCards ? CardFeature.run(() -> Cards.discover(this, hiddenApps,
                 () -> Cards.load(Cards.storeFile(this)), leanback), none) : none;
-        adapter.reload(cards.isEmpty() ? none : CardFeature.run(() -> Cards.shown(cards), none), leanback);
+        final List<InputTiles.Tile> inputs = inputTileSource != null ? inputTileSource.list() : Collections.emptyList();
+        inputTileSignature = InputTiles.signature(inputs);
+        adapter.reload(cards.isEmpty() ? none : CardFeature.run(() -> Cards.shown(cards), none), leanback, inputs);
         lastFocusedKey = returnKey;
         lastFocused = returnSlot;
         packageSequence = currentPackageSequence(packageSequence);
+    }
+
+    private void scheduleInputTiles() {
+        if (inputTileSource == null) return;
+        handler.removeCallbacks(refreshInputTiles);
+        handler.postDelayed(refreshInputTiles, 400);   // CEC devices arrive in bursts at boot and on wake
+    }
+
+    /**
+     * A port, a device or a name changed: rebuild the tiles (focus goes back to the same tile by key). A change of
+     * connection state alone only rebinds that tile's dot and the shelf line. In the background, or while a tile is
+     * being moved, the rebuild waits for the next onResume.
+     */
+    private void refreshInputTilesNow() {
+        if (inputTileSource == null || adapter == null) return;
+        List<InputTiles.Tile> now = inputTileSource.list();
+        if (!InputTiles.signature(now).equals(inputTileSignature)) {
+            if (started && !stopped && !reordering) reloadApps(false, true);
+            else tileRefresh.invalidate();
+            return;
+        }
+        for (InputTiles.Tile t : now) {
+            if (t.visible && adapter.updateInputState(t.portId, t.state) && cinematic && heroMeta != null
+                    && lastFocused >= 0 && adapter.isInputAt(lastFocused)) {
+                updateHeroMeta(lastFocused);
+            }
+        }
     }
 
     /**
@@ -1318,6 +1383,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         cancelHoldOk();
         root.removeCallbacks(showIdleClock);
         endReorder();   // Home or another app while reordering keeps the order so far
+        handler.removeCallbacks(hideGreeting);
+        handler.removeCallbacks(refreshInputTiles);
+        if (greetingOnce) {
+            greeting.animate().cancel();
+            greeting.setAlpha(0f);
+            greeting.setVisibility(View.INVISIBLE);
+        }
         wallpaperPlayer.stop();
         stopAmbientAnimation();
         hero.animate().cancel();
@@ -2098,6 +2170,16 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
     /** "Last opened yesterday, 9:40 PM", the time in white; nothing (but the same height) when it was never seen. */
     private void updateHeroMeta(int position) {
+        String portLine = adapter.metaAt(position);   // an input tile: "HDMI 1 · Connected", not a last-opened time
+        if (portLine != null) {
+            SpannableString line = new SpannableString(portLine);
+            String state = adapter.metaStateAt(position);
+            int at = state == null ? -1 : portLine.lastIndexOf(state);
+            if (at >= 0) line.setSpan(new ForegroundColorSpan(0xFFFFFFFF), at, at + state.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            heroMeta.setText(line);
+            heroMeta.setVisibility(View.VISIBLE);
+            return;
+        }
         long when = LastOpened.get(this, adapter.packageAt(position));
         if (when <= 0) {
             heroMeta.setVisibility(View.INVISIBLE);
@@ -2802,8 +2884,38 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                     : getString(R.string.greeting_with_name, getString(res), greetingName));
             greeting.setTextColor(greetingColor);
         }
+        if (greetingOnce && resumed) showGreetingOnce(res);
         if (shamsi) shamsiDate.setText(Shamsi.today(getResources()));
         if (lunar) lunarDate.setText(Lunar.today(getResources(), lunarOffset));
+    }
+
+    /** greeting_once: fade the greeting in (400 ms), hold it 8 s, fade it out (600 ms), once per part of the day. */
+    private void showGreetingOnce(int res) {
+        SharedPreferences state = getSharedPreferences("home_state", MODE_PRIVATE);
+        String now = GreetingOnce.key(LocalDate.now().toString(), getResources().getResourceEntryName(res));
+        if (!GreetingOnce.due(state.getString("greeting_seen", null), now)) return;
+        state.edit().putString("greeting_seen", now).apply();
+        handler.removeCallbacks(hideGreeting);
+        greeting.animate().cancel();
+        greeting.setVisibility(View.VISIBLE);
+        if (!animations) {
+            greeting.setAlpha(1f);
+        } else {
+            greeting.setAlpha(0f);
+            greeting.animate().alpha(1f).setDuration(reducedMotion ? Motion.REDUCED_MS : 400).start();
+        }
+        handler.postDelayed(hideGreeting, GREETING_HOLD_MS);
+    }
+
+    private void fadeOutGreeting() {
+        greeting.animate().cancel();
+        if (!animations) {
+            greeting.setAlpha(0f);
+            greeting.setVisibility(View.INVISIBLE);
+            return;
+        }
+        greeting.animate().alpha(0f).setDuration(reducedMotion ? Motion.REDUCED_MS : 600)
+                .withEndAction(() -> greeting.setVisibility(View.INVISIBLE)).start();
     }
 
     // ---- race-weekend panel (a theme's race_calendar) -----------------------------------------------
@@ -3844,12 +3956,14 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             pickUp(at);
             Toast.makeText(this, R.string.reorder_hint, Toast.LENGTH_LONG).show();
         });
-        if (appLibraryEnabled) addSettingsMenuRow(rows, popup, R.string.library_remove_shortcut, () -> {
+        // An input tile is not an app: only Replace in dock and Move.
+        final boolean input = adapter.isInputAt(position);
+        if (appLibraryEnabled && !input) addSettingsMenuRow(rows, popup, R.string.library_remove_shortcut, () -> {
             if (LibraryApps.save(this, pkg, false)) reloadApps(false);
             else Toast.makeText(this, R.string.library_save_failed, Toast.LENGTH_LONG).show();
         });
         // Some firmware has no App info page at all; a row that only toasts "can't open" helps nobody.
-        Intent info = SystemSettings.appInfo(this, pkg);
+        Intent info = input ? null : SystemSettings.appInfo(this, pkg);
         if (info != null) addSettingsMenuRow(rows, popup, R.string.library_app_info, () -> open(info));
         panel.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
         popup.setWidth(Math.max((int) (200 * density), panel.getMeasuredWidth()));
