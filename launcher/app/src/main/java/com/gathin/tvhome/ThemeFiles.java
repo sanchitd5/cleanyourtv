@@ -6,6 +6,8 @@ import java.util.regex.Pattern;
 /** The files ThemeProvider may write or delete under Config.dir, by the URI's path segments. */
 final class ThemeFiles {
     static final String WALLPAPERS = "wallpapers";
+    /** input_logos: a theme's logo files for HDMI devices live in inputs/, named as a collection image is. */
+    static final String INPUTS = "inputs";
     /** The names tools/theme.sh accepts for a collection image, and the types WallpaperRotation reads. */
     private static final Pattern IMAGE = Pattern.compile("[A-Za-z0-9_.-]+\\.(jpg|jpeg|png|webp)",
             Pattern.CASE_INSENSITIVE);
@@ -24,6 +26,9 @@ final class ThemeFiles {
                 && (collectionImage(segments.get(1)) || clip(segments.get(1))
                 || WallpaperCaptions.FILE_NAME.equals(segments.get(1)))) {
             return WALLPAPERS + "/" + segments.get(1);
+        }
+        if (segments.size() == 2 && INPUTS.equals(segments.get(0)) && collectionImage(segments.get(1))) {
+            return INPUTS + "/" + segments.get(1);
         }
         return null;
     }

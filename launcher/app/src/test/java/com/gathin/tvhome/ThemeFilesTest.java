@@ -74,4 +74,16 @@ public class ThemeFilesTest {
         assertFalse(ThemeFiles.isCollection(Arrays.asList("wallpapers", "dusk.jpg")));
         assertFalse(ThemeFiles.isCollection(Collections.singletonList("config.json")));
     }
+
+    @Test public void theInputLogosFolderTakesCollectionImagesOnly() {
+        assertEquals("inputs/ps5.png", ThemeFiles.path(Arrays.asList("inputs", "ps5.png")));
+        assertEquals("inputs/Fire_TV-2.webp", ThemeFiles.path(Arrays.asList("inputs", "Fire_TV-2.webp")));
+        assertNull(ThemeFiles.path(Arrays.asList("inputs", "../x")));
+        assertNull(ThemeFiles.path(Arrays.asList("inputs", "..")));
+        assertNull(ThemeFiles.path(Arrays.asList("inputs", "a.mp4")));
+        assertNull(ThemeFiles.path(Arrays.asList("inputs", ".hidden.png")));
+        assertNull(ThemeFiles.path(Arrays.asList("inputs", "a", "ps5.png")));
+        assertNull(ThemeFiles.path(Collections.singletonList("inputs")));
+        assertNull(ThemeFiles.path(Arrays.asList("inputs", "notes.txt")));
+    }
 }

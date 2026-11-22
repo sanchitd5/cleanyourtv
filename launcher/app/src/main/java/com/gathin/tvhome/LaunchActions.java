@@ -22,6 +22,11 @@ final class LaunchActions {
 
     private static final String INPUT_PREFIX = "input:";
 
+    /** The launch_actions value and dock_apps key of an HDMI input tile: "input:<id>". {@link #inputId} reads it back. */
+    static String inputKey(String inputId) {
+        return INPUT_PREFIX + inputId;
+    }
+
     /** The TV input id from an "input:<id>" launch_actions value, or null when the value isn't one, including
      *  an empty id ("input:" alone), which falls back to a normal launch rather than an empty input switch. */
     static String inputId(String action) {
