@@ -10,6 +10,7 @@ import android.content.pm.ResolveInfo;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.TextView;
 import android.widget.LinearLayout;
 import android.widget.Toast;
@@ -139,12 +140,7 @@ public final class LauncherSettingsActivity extends Activity {
             if (advancedEffects) {
                 setAdvanced(false);
             } else {
-                new AlertDialog.Builder(this)
-                        .setTitle(R.string.advanced_effects)
-                        .setMessage(R.string.advanced_effects_warning)
-                        .setPositiveButton(R.string.enable, (dialog, which) -> setAdvanced(true))
-                        .setNegativeButton(android.R.string.cancel, null)
-                        .show();
+                showConfirm(R.string.advanced_effects, R.string.advanced_effects_warning, R.string.enable, () -> setAdvanced(true));
             }
         });
         openOnStartChoice = findViewById(R.id.openOnStartChoice);
@@ -173,6 +169,7 @@ public final class LauncherSettingsActivity extends Activity {
                 open(new Intent(this, HomeSettingsActivity.class)));
         findViewById(R.id.tvSettingsChoice).setOnClickListener(v ->
                 open(SystemSettings.intent(this, Settings.ACTION_SETTINGS)));
+        styleSheet(config);
         refresh();
         if (config.launcherSettingsButton) reorderChoice.requestFocus();
         else columnChoices[Math.max(0, Math.min(columns - 4, 3))].requestFocus();
@@ -185,7 +182,7 @@ public final class LauncherSettingsActivity extends Activity {
     }
 
     /** How a Home look row shows and lists its values. */
-    private enum Fmt { NUMBER, SWITCH, PERCENT, SECONDS_OFF, MINUTES_OFF, SECONDS_NEVER, MINUTES_NEVER, PARALLAX, GREETING, PHOTOS }
+    private enum Fmt { NUMBER, SWITCH, PERCENT, SECONDS_OFF, MINUTES_OFF, SECONDS_NEVER, MINUTES_NEVER, PARALLAX, GREETING, PHOTOS, TOP_BAR }
 
     private static final class HomeRow {
         final String key;
@@ -229,6 +226,9 @@ public final class LauncherSettingsActivity extends Activity {
         homeRows.add(new HomeRow(Config.SCREENSAVER_PHOTOS_KEY, R.string.screensaver_photos_label, Config.SWITCH_CHOICES, Fmt.PHOTOS));
         homeRows.add(new HomeRow(Config.REDUCED_MOTION_KEY, R.string.reduced_motion_label, Config.SWITCH_CHOICES, Fmt.SWITCH));
         homeRows.add(new HomeRow(Config.WATERMARK_SHOW_KEY, R.string.watermark_label, Config.SWITCH_CHOICES, Fmt.SWITCH));   // watermark
+        homeRows.add(new HomeRow(Config.REDUCE_TRANSPARENCY_KEY, R.string.reduce_transparency_label, Config.SWITCH_CHOICES, Fmt.SWITCH));   // glass
+        homeRows.add(new HomeRow(Config.TOP_BAR_LAYOUT_KEY, R.string.top_bar_label, Config.TOP_BAR_LAYOUT_CHOICES, Fmt.TOP_BAR));   // top bar
+        homeRows.add(new HomeRow(Config.TOP_BAR_DATE_KEY, R.string.top_bar_date_label, Config.SWITCH_CHOICES, Fmt.SWITCH));   // top bar
         float dp = getResources().getDisplayMetrics().density;
         for (HomeRow row : homeRows) {
             TextView view = new TextView(this, null, 0, R.style.SettingsRow);
@@ -250,19 +250,13 @@ public final class LauncherSettingsActivity extends Activity {
             labels[i] = homeValue(row.fmt, row.values[i]);
             if (row.values[i] == saved) checked = i;
         }
-        new AlertDialog.Builder(this)
-                .setTitle(row.label)
-                .setSingleChoiceItems(labels, checked, (dialog, which) -> {
-                    dialog.dismiss();
-                    choices.edit().putInt(row.key, row.values[which]).apply();
-                    homeChanged();
-                })
-                .setNeutralButton(R.string.follow_theme_row, (dialog, which) -> {
-                    Config.clearHorizonChoice(choices.edit(), row.key).apply();
-                    homeChanged();
-                })
-                .setNegativeButton(android.R.string.cancel, null)
-                .show();
+        showChoices(row.label, labels, checked, which -> {
+            choices.edit().putInt(row.key, row.values[which]).apply();
+            homeChanged();
+        }, R.string.follow_theme_row, () -> {
+            Config.clearHorizonChoice(choices.edit(), row.key).apply();
+            homeChanged();
+        });
     }
 
     private void homeChanged() {
@@ -283,6 +277,7 @@ public final class LauncherSettingsActivity extends Activity {
                     : value <= 4 ? R.string.level_medium : R.string.level_high);
             case GREETING: return getString(value == Config.GREETING_OFF ? R.string.off
                     : value == Config.GREETING_ALWAYS ? R.string.greeting_always : R.string.greeting_once);
+            case TOP_BAR: return getString(value == 1 ? R.string.top_bar_split : value == 2 ? R.string.top_bar_tvos : R.string.top_bar_classic);
             case PHOTOS: return getString(value == 1 ? R.string.photos_folder : R.string.photos_home);
             default: return String.valueOf(value);
         }
@@ -312,10 +307,7 @@ public final class LauncherSettingsActivity extends Activity {
         String current = choices.getString(Config.WALLPAPER_CHOICE_KEY, null);
         int checked = "none".equals(current) ? images.size()
                 : indexOf(images, current);
-        new AlertDialog.Builder(this)
-                .setTitle(R.string.wallpaper_label)
-                .setSingleChoiceItems(labels, checked, (dialog, which) -> {
-                    dialog.dismiss();
+        showChoices(R.string.wallpaper_label, labels, checked, which -> {
                     if (which == images.size()) {
                         choices.edit().putString(Config.WALLPAPER_CHOICE_KEY, "none").apply();
                     } else {
@@ -325,14 +317,11 @@ public final class LauncherSettingsActivity extends Activity {
                     changed();
                     Toast.makeText(this, R.string.wallpaper_applied, Toast.LENGTH_SHORT).show();
                     refresh();
-                })
-                .setNeutralButton(R.string.wallpaper_theme_default, (dialog, which) -> {
+                }, R.string.wallpaper_theme_default, () -> {
                     choices.edit().remove(Config.WALLPAPER_CHOICE_KEY).apply();
                     changed();
                     refresh();
-                })
-                .setNegativeButton(android.R.string.cancel, null)
-                .show();
+                });
     }
 
     /** Off, then every app with a TV entry point by name. Saved at once; it is read on the next boot. */
@@ -356,19 +345,14 @@ public final class LauncherSettingsActivity extends Activity {
             labels[i + 1] = apps.get(i)[0];
             if (apps.get(i)[1].equals(current)) checked = i + 1;
         }
-        new AlertDialog.Builder(this)
-                .setTitle(R.string.open_on_start_label)
-                .setSingleChoiceItems(labels, checked, (dialog, which) -> {
-                    dialog.dismiss();
+        showChoices(R.string.open_on_start_label, labels, checked, which -> {
                     if (which == 0) choices.edit().remove(OpenOnStart.KEY).apply();
                     else {
                         OpenOnStart.skipThisBoot(this);
                         choices.edit().putString(OpenOnStart.KEY, apps.get(which - 1)[1]).apply();
                     }
                     refresh();
-                })
-                .setNegativeButton(android.R.string.cancel, null)
-                .show();
+                }, 0, null);
     }
 
     /** The picked app's name, its package when it is gone, or Off. */
@@ -437,6 +421,78 @@ public final class LauncherSettingsActivity extends Activity {
             row.view.setText(getString(R.string.home_row_state, getString(row.label), homeState(row)));
         }
         followThemeChoice.setSelected(!hasOnTvChoices());
+        if (Glass.on()) dimValues();
+    }
+
+    // ---- glass sheet (HOME-DESIGN.md 19.6) ----
+
+    private GlassMotionController sheetMotion;
+    private boolean sheetClosing;
+
+    /** Glass: the full-screen sheet over the blurred Home backdrop; solid with reduce transparency, tinted with no backdrop. Does nothing with glass off. */
+    private void styleSheet(Config config) {
+        Glass.configure(config);
+        if (!Glass.on()) return;
+        ViewGroup sheet = findViewById(R.id.settingsSheet);
+        getWindow().setBackgroundDrawable(GlassSheet.fallbackBackground());
+        Glass.apply(sheet, 0f, GlassBackdrop.current() != null);   // the backdrop stands in for Home, which is stopped behind us
+        GlassSheet.restyle(sheet);
+        Glass.chips(sheet);
+        sheetMotion = new GlassMotionController(sheet, Glass.animations(), Glass.reducedMotion());
+        sheetMotion.useSheetProfile();
+        sheetMotion.watch(sheet, false);
+        sheetMotion.prepareOpen(0.5f, 0.5f);
+        overridePendingTransition(0, 0);
+        sheetMotion.runOpen();
+    }
+
+    /** The value half of every state row at 78 %. */
+    private void dimValues() {
+        GlassSheet.dimValue(animationsChoice);
+        GlassSheet.dimValue(advancedChoice);
+        GlassSheet.dimValue(wallpaperChoice);
+        GlassSheet.dimValue(openOnStartChoice);
+        for (HomeRow row : homeRows) GlassSheet.dimValue(row.view);
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (sheetMotion == null) {
+            super.onBackPressed();
+            return;
+        }
+        if (sheetClosing) return;
+        sheetClosing = true;
+        sheetMotion.close(() -> {
+            finish();
+            overridePendingTransition(0, 0);
+        });
+    }
+
+    /** A list of choices: a glass dialog with glass on, else the system AlertDialog. {@code neutral} (0 for none) is the extra button. */
+    private void showChoices(int title, String[] labels, int checked, java.util.function.IntConsumer onPick, int neutral, Runnable onNeutral) {
+        if (Glass.on()) {
+            SettingsDialog.choose(this, title, labels, checked, onPick, neutral, onNeutral);
+            return;
+        }
+        AlertDialog.Builder b = new AlertDialog.Builder(this).setTitle(title)
+                .setSingleChoiceItems(labels, checked, (dialog, which) -> {
+                    dialog.dismiss();
+                    onPick.accept(which);
+                })
+                .setNegativeButton(android.R.string.cancel, null);
+        if (neutral != 0) b.setNeutralButton(neutral, (dialog, which) -> onNeutral.run());
+        b.show();
+    }
+
+    private void showConfirm(int title, int message, int positive, Runnable onPositive) {
+        if (Glass.on()) {
+            SettingsDialog.confirm(this, title, message, positive, onPositive);
+            return;
+        }
+        new AlertDialog.Builder(this).setTitle(title).setMessage(message)
+                .setPositiveButton(positive, (dialog, which) -> onPositive.run())
+                .setNegativeButton(android.R.string.cancel, null).show();
     }
 
     private boolean anyHorizonChoice() {

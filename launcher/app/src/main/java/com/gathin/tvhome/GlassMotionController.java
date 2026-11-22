@@ -28,6 +28,11 @@ final class GlassMotionController {
     private final SpringAnimation scaleX, scaleY, lift, parallax;
     private final FloatValueHolder biasValue = new FloatValueHolder(0f);
     private final Rect tmp = new Rect();
+    // The open and close numbers: a popup's by default, the full-screen sheet's after useSheetProfile().
+    private float openScaleFrom = GlassMotion.OPEN_SCALE_FROM, openLiftDp = GlassMotion.OPEN_LIFT_DP;
+    private float openStiffness = GlassMotion.OPEN_STIFFNESS, openDamping = GlassMotion.OPEN_DAMPING;
+    private float closeScaleTo = GlassMotion.CLOSE_SCALE_TO;
+    private int openAlphaMs = GlassMotion.OPEN_ALPHA_MS, closeMs = GlassMotion.CLOSE_MS;
     private int style = GlassMotion.STYLE_FULL;
     private float animatorScale = 1f;
     private float pivotFx = 0.5f, pivotFy = 0.5f;
@@ -78,6 +83,17 @@ final class GlassMotionController {
         });
     }
 
+    /** The full-screen settings sheet (19.7): rises 24 dp and scales from 0.98 on a (500, 0.9) spring, alpha 160 ms; closes by alpha alone in 120 ms. */
+    void useSheetProfile() {
+        openScaleFrom = GlassMotion.SHEET_SCALE_FROM;
+        openLiftDp = GlassMotion.SHEET_LIFT_DP;
+        openStiffness = GlassMotion.SHEET_STIFFNESS;
+        openDamping = GlassMotion.SHEET_DAMPING;
+        openAlphaMs = GlassMotion.SHEET_ALPHA_MS;
+        closeMs = GlassMotion.SHEET_CLOSE_MS;
+        closeScaleTo = 1f;
+    }
+
     private static SpringAnimation spring(SpringAnimation a, float minVisible) {
         a.setSpring(new androidx.dynamicanimation.animation.SpringForce(a.getSpring().getFinalPosition()));
         a.setMinimumVisibleChange(minVisible);
@@ -97,9 +113,9 @@ final class GlassMotionController {
     private void refresh() {
         animatorScale = readAnimatorScale();
         style = GlassMotion.style(ValueAnimator.areAnimatorsEnabled() && animatorScale > 0f, animations, reduced);
-        setSpring(scaleX, GlassMotion.OPEN_STIFFNESS, GlassMotion.OPEN_DAMPING);
-        setSpring(scaleY, GlassMotion.OPEN_STIFFNESS, GlassMotion.OPEN_DAMPING);
-        setSpring(lift, GlassMotion.OPEN_STIFFNESS, GlassMotion.OPEN_DAMPING);
+        setSpring(scaleX, openStiffness, openDamping);
+        setSpring(scaleY, openStiffness, openDamping);
+        setSpring(lift, openStiffness, openDamping);
         setSpring(parallax, GlassMotion.PARALLAX_STIFFNESS, GlassMotion.PARALLAX_DAMPING);
     }
 
@@ -124,9 +140,9 @@ final class GlassMotionController {
         }
         panel.setAlpha(0f);
         if (style == GlassMotion.STYLE_FULL) {
-            panel.setScaleX(GlassMotion.OPEN_SCALE_FROM);
-            panel.setScaleY(GlassMotion.OPEN_SCALE_FROM);
-            panel.setTranslationY(GlassMotion.OPEN_LIFT_DP * density);
+            panel.setScaleX(openScaleFrom);
+            panel.setScaleY(openScaleFrom);
+            panel.setTranslationY(openLiftDp * density);
         }
     }
 
@@ -135,7 +151,7 @@ final class GlassMotionController {
         if (style == GlassMotion.STYLE_SNAP) return;
         final boolean full = style == GlassMotion.STYLE_FULL;
         panel.animate().cancel();
-        panel.animate().alpha(1f).setDuration(full ? GlassMotion.OPEN_ALPHA_MS : Motion.REDUCED_MS)
+        panel.animate().alpha(1f).setDuration(full ? openAlphaMs : Motion.REDUCED_MS)
                 .setInterpolator(LINEAR).setListener(null).start();
         if (!full) return;
         if (panel.getWidth() > 0) {
@@ -175,8 +191,8 @@ final class GlassMotionController {
         panel.setPivotX(panel.getWidth() * pivotFx);
         panel.setPivotY(panel.getHeight() * pivotFy);
         android.view.ViewPropertyAnimator a = panel.animate().alpha(0f).setListener(null)
-                .setDuration(full ? GlassMotion.CLOSE_MS : Motion.REDUCED_MS).setInterpolator(FocusMotion.STANDARD);
-        if (full) a.scaleX(GlassMotion.CLOSE_SCALE_TO).scaleY(GlassMotion.CLOSE_SCALE_TO);
+                .setDuration(full ? closeMs : Motion.REDUCED_MS).setInterpolator(FocusMotion.STANDARD);
+        if (full) a.scaleX(closeScaleTo).scaleY(closeScaleTo);
         a.withEndAction(closeDone).start();
     }
 
