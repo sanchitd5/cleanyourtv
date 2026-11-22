@@ -108,6 +108,7 @@ final class TopBar {
             clock.setTypeface(ampm.getTypeface());
             clock.setTextSize(TypedValue.COMPLEX_UNIT_SP, 22);
             clock.setLetterSpacing(0f);
+            Fonts.applyClock(clock, cfg.font);   // tabular figures under Inter, so the time never jitters
             clock.setTextColor(0xFFF5F7FA);
             ampm.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
             ampm.setLetterSpacing(0.08f);
@@ -134,7 +135,7 @@ final class TopBar {
     private void caption(TextView v, float sp) {
         v.setTypeface(ampm.getTypeface());
         v.setTextSize(TypedValue.COMPLEX_UNIT_SP, sp);
-        v.setLetterSpacing(CAPTION_TRACKING);
+        v.setLetterSpacing(Fonts.captionTracking(cfg.font));   // Outfit CAPTION_TRACKING (0.12), Inter 0.08 (21.8)
     }
 
     /** The capsule: items of 36 dp with a 4 dp gap, no resting background of their own; the VPN pill keeps its own. */

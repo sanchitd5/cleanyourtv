@@ -583,4 +583,9 @@ The people whose work is in this repo:
 ## Licence
 
 MIT, see [`LICENSE`](LICENSE). The Outfit typeface is under the SIL Open Font License, see
-`launcher/FONT-LICENSE-OFL.txt`.
+`launcher/FONT-LICENSE-OFL.txt`. So is Inter (theme key `font: "inter"`), see
+`launcher/FONT-LICENSE-INTER-OFL.txt`. Inter is Inter 4.1, downloaded from
+https://github.com/rsms/inter/releases/download/v4.1/Inter-4.1.zip (SHA-256
+`9883fdd4a49d4fb66bd8177ba6625ef9a64aa45899767dde3d36aa425756b11e`), then cut with fontTools to the Latin,
+Latin-1, Latin Extended-A, punctuation and arrow glyphs the launcher draws, in three static weights
+(Light 300, Regular 400, Medium 500; features tnum, kern, liga, calt, ss01, case).
