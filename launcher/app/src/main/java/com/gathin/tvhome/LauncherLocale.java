@@ -8,7 +8,7 @@ import java.util.regex.Pattern;
 /**
  * locale: the language the launcher shows itself in, instead of the TV's. A China-market Xiaomi offers Chinese and
  * English only, so a Vietnamese owner saw the launcher in Chinese although it is translated into Vietnamese.
- * Each activity wraps its base context here; an empty or malformed tag leaves the TV's language.
+ * Each activity wraps its base context here (which also picks the font, see Fonts); an empty or malformed tag leaves the TV's language.
  */
 final class LauncherLocale {
     // Subtags after the language, so "sr-Latn" and "ar-EG-u-nu-latn" (Arabic with Western digits) pass too.
@@ -25,12 +25,13 @@ final class LauncherLocale {
 
     /** base with the configured language, or base itself when locale is off. */
     static Context wrap(Context base) {
-        Locale locale = parse(Config.load(base).locale);
-        if (locale == null) return base;
+        Config config = Config.load(base);
+        Locale locale = parse(config.locale);
+        if (locale == null) return Fonts.wrap(base, config.font);
         // Formatters that take no Context (the clock's date, the lunar line) follow the default locale.
         Locale.setDefault(locale);
         Configuration c = new Configuration(base.getResources().getConfiguration());
         c.setLocale(locale);
-        return base.createConfigurationContext(c);
+        return Fonts.wrap(base.createConfigurationContext(c), config.font);   // font
     }
 }

@@ -182,7 +182,7 @@ public final class LauncherSettingsActivity extends Activity {
     }
 
     /** How a Home look row shows and lists its values. */
-    private enum Fmt { NUMBER, SWITCH, PERCENT, SECONDS_OFF, MINUTES_OFF, SECONDS_NEVER, MINUTES_NEVER, PARALLAX, GREETING, PHOTOS, TOP_BAR }
+    private enum Fmt { NUMBER, SWITCH, PERCENT, SECONDS_OFF, MINUTES_OFF, SECONDS_NEVER, MINUTES_NEVER, PARALLAX, GREETING, PHOTOS, TOP_BAR, FONT }
 
     private static final class HomeRow {
         final String key;
@@ -224,6 +224,7 @@ public final class LauncherSettingsActivity extends Activity {
         homeRows.add(new HomeRow(Config.CLOCK_DIM_AFTER_KEY, R.string.clock_dim_label, Config.CLOCK_DIM_AFTER_CHOICES, Fmt.MINUTES_OFF));
         homeRows.add(new HomeRow(Config.CLOCK_BLANK_AFTER_KEY, R.string.clock_blank_label, Config.CLOCK_BLANK_AFTER_CHOICES, Fmt.MINUTES_OFF));
         homeRows.add(new HomeRow(Config.SCREENSAVER_PHOTOS_KEY, R.string.screensaver_photos_label, Config.SWITCH_CHOICES, Fmt.PHOTOS));
+        homeRows.add(new HomeRow(Config.HOME_FONT_KEY, R.string.font_label, Fonts.CHOICES, Fmt.FONT));   // font
         homeRows.add(new HomeRow(Config.REDUCED_MOTION_KEY, R.string.reduced_motion_label, Config.SWITCH_CHOICES, Fmt.SWITCH));
         homeRows.add(new HomeRow(Config.WATERMARK_SHOW_KEY, R.string.watermark_label, Config.SWITCH_CHOICES, Fmt.SWITCH));   // watermark
         homeRows.add(new HomeRow(Config.REDUCE_TRANSPARENCY_KEY, R.string.reduce_transparency_label, Config.SWITCH_CHOICES, Fmt.SWITCH));   // glass
@@ -278,6 +279,7 @@ public final class LauncherSettingsActivity extends Activity {
             case GREETING: return getString(value == Config.GREETING_OFF ? R.string.off
                     : value == Config.GREETING_ALWAYS ? R.string.greeting_always : R.string.greeting_once);
             case TOP_BAR: return getString(value == 1 ? R.string.top_bar_split : value == 2 ? R.string.top_bar_tvos : R.string.top_bar_classic);
+            case FONT: return getString(value == Fonts.CHOICE_INTER ? R.string.font_inter : R.string.font_outfit);
             case PHOTOS: return getString(value == 1 ? R.string.photos_folder : R.string.photos_home);
             default: return String.valueOf(value);
         }
