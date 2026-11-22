@@ -15,6 +15,23 @@ final class TopBarLayout {
     /** Widest the corner scrim is stretched. */
     static final float MAX_SCALE_X = 1.25f;
 
+    /** Longest the bar stays hidden waiting for its text widths and the capsule to settle (ms). */
+    static final int SETTLE_TIMEOUT_MS = 500;
+    /** Reveal fade (ms). */
+    static final int REVEAL_MS = 150;
+
+    /** Whether the text widths (clock, AM/PM, date) are unchanged across two consecutive passes, or the timeout has elapsed. prev is null before the first pass. */
+    static boolean stable(int[] prev, int[] cur, long elapsedMs) {
+        if (elapsedMs >= SETTLE_TIMEOUT_MS) return true;
+        return prev != null && cur != null && java.util.Arrays.equals(prev, cur);
+    }
+
+    /** The tvos capsule's width the layout must reach for the time to sit inside it: its box from {@link #capsule}. */
+    static int capsuleWidth(int rightEdge, int[] buttonWidths, int clockW, int ampmW, float density) {
+        Capsule c = capsule(rightEdge, 0, buttonWidths, clockW, ampmW, density);
+        return c.right - c.left;
+    }
+
     /** The layout actually used: the configured one, or classic for right-to-left menus and the extra date lines. */
     static String mode(String value, boolean rtl, boolean shamsi, boolean lunar) {
         return rtl || shamsi || lunar ? Config.TOP_BAR_MODE_CLASSIC : Config.topBarLayout(value);
