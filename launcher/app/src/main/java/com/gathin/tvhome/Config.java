@@ -388,6 +388,14 @@ final class Config {
     final String watermark;
     static final String WATERMARK_SHOW_KEY = "watermark_show";
     static final int WATERMARK_MAX = 60;
+    // quick_panel_credit: a credit line at the bottom of the quick panel (theme key; the watermark On/Off row hides it too).
+    /** The quick panel's credit line, already cleaned and already hidden when the watermark row is Off; empty is none. */
+    final String quickPanelCredit;
+
+    /** The credit to show: the cleaned text, or empty when there is none or the Watermark row is Off. */
+    static String visibleCredit(String raw, boolean watermarkShown) {
+        return watermarkShown ? cleanWatermark(raw) : "";
+    }
 
     /** Trimmed, control characters stripped, at most 60 characters (code points); null is empty. */
     static String cleanWatermark(String raw) {
@@ -529,7 +537,7 @@ final class Config {
                    boolean topShelf, int topShelfScrim, int focusParallax, boolean focusSheen, boolean inputTiles, boolean inputTilesShowEmpty,
                    Map<String, String> inputLogos, boolean greetingOnce, int homeIdleCalmSeconds, int homeIdleDimSeconds, boolean homeIdleShift,
                    int wallpaperCaptionSeconds, int clockShiftSeconds, int clockDimAfterMinutes, int clockDimFloor, int clockBlankAfterMinutes,
-                   boolean glassSurfaces, boolean glassLiveBackdrop, boolean glassReduceTransparency, String inputGroup, String watermark,
+                   boolean glassSurfaces, boolean glassLiveBackdrop, boolean glassReduceTransparency, String inputGroup, String watermark, String quickPanelCredit,
                    String topBarLayout, boolean topBarDate, String font) {
         this.handleViewInputs = handleViewInputs;
         this.tileMenu = tileMenu;
@@ -673,6 +681,7 @@ final class Config {
         this.glassReduceTransparency = glassReduceTransparency;
         this.inputGroup = inputGroup(inputGroup);
         this.watermark = cleanWatermark(watermark);   // watermark
+        this.quickPanelCredit = cleanWatermark(quickPanelCredit);   // quick_panel_credit
         this.topBarLayout = topBarLayout(topBarLayout);
         this.topBarDate = topBarDate;
         this.font = Fonts.font(font);
@@ -835,6 +844,7 @@ final class Config {
         boolean glassReduceTransparency = false;
         String inputGroup = INPUT_GROUP_OFF;
         String watermark = "";   // watermark
+        String quickPanelCredit = "";   // quick_panel_credit
         String topBarLayout = TOP_BAR_MODE_CLASSIC;
         boolean topBarDate = true;
         String font = FONT_OUTFIT;
@@ -978,6 +988,7 @@ final class Config {
             glassReduceTransparency = bool(json, "glass_reduce_transparency", glassReduceTransparency);
             inputGroup = string(json, "input_group", inputGroup);
             watermark = cleanWatermark(string(json, "watermark", watermark));   // watermark
+            quickPanelCredit = cleanWatermark(string(json, "quick_panel_credit", quickPanelCredit));   // quick_panel_credit
             topBarLayout = string(json, "top_bar_layout", topBarLayout);
             topBarDate = bool(json, "top_bar_date", topBarDate);
             font = string(json, "font", font);
@@ -1014,6 +1025,7 @@ final class Config {
         reducedMotion = chosenSwitch(choices.getInt(REDUCED_MOTION_KEY, -1), reducedMotion);
         glassReduceTransparency = chosenSwitch(choices.getInt(REDUCE_TRANSPARENCY_KEY, -1), glassReduceTransparency);
         if (!chosenSwitch(choices.getInt(WATERMARK_SHOW_KEY, -1), true)) watermark = "";   // watermark: hidden on the TV
+        quickPanelCredit = visibleCredit(quickPanelCredit, chosenSwitch(choices.getInt(WATERMARK_SHOW_KEY, -1), true));   // quick_panel_credit: same row
         topBarLayout = chosenTopBarLayout(choices.getInt(TOP_BAR_LAYOUT_KEY, -1), topBarLayout);
         topBarDate = chosenSwitch(choices.getInt(TOP_BAR_DATE_KEY, -1), topBarDate);
         int chosenRows = choices.getInt(ROWS_BELOW_DOCK_KEY, rowsBelow);
@@ -1080,7 +1092,7 @@ final class Config {
                 topShelf, topShelfScrim, focusParallax, focusSheen, inputTiles, inputTilesShowEmpty, packageMap(inputLogos), greetingOnce,
                 homeIdleCalmSeconds, homeIdleDimSeconds, homeIdleShift, wallpaperCaptionSeconds, clockShiftSeconds,
                 clockDimAfterMinutes, clockDimFloor, clockBlankAfterMinutes,
-                glassSurfaces, glassLiveBackdrop, glassReduceTransparency, inputGroup, watermark,
+                glassSurfaces, glassLiveBackdrop, glassReduceTransparency, inputGroup, watermark, quickPanelCredit,
                 topBarLayout, topBarDate, font);
     }
 

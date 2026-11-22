@@ -81,6 +81,19 @@ public final class QuickSettingsActivity extends Activity {
             position.setMargins(inset, position.topMargin, 0, position.bottomMargin);
             panel.setLayoutParams(position);
         }
+        TextView credit = findViewById(R.id.qp_credit);   // quick_panel_credit; inside the panel, so it rides the sheet's motion
+        if (!cfg.quickPanelCredit.isEmpty()) {
+            credit.setText(cfg.quickPanelCredit);
+            credit.setTypeface(UiFont.get(this, R.string.font_medium));
+            credit.setLetterSpacing(Fonts.captionTracking(cfg.font));
+            if (!center) {   // the compact panel wraps its content: the line sits right under the rows
+                LinearLayout.LayoutParams at = (LinearLayout.LayoutParams) credit.getLayoutParams();
+                at.height = ViewGroup.LayoutParams.WRAP_CONTENT;
+                at.weight = 0;
+                credit.setLayoutParams(at);
+            }
+            credit.setVisibility(View.VISIBLE);
+        }
         findViewById(R.id.scrim).setOnClickListener(v -> finish());
         if (center) {
             rows.setVisibility(View.GONE);
