@@ -3811,9 +3811,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         popup.setElevation(0f);
         popup.setOnDismissListener(() -> {
             if (openPopup == popup) openPopup = null;
+            if (Glass.on() && wallpaperPlayer != null) wallpaperPlayer.stopLiveSampling();   // glass:
         });
         openPopup = popup;
-        Glass.apply(panel, GlassSurface.POPUP_RADIUS_DP, true);
+        if (Glass.apply(panel, GlassSurface.POPUP_RADIUS_DP, true) && wallpaperPlayer != null) wallpaperPlayer.startLiveSampling();   // glass: one sample now, then 1 Hz
         return popup;
     }
 
