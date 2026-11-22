@@ -32,6 +32,12 @@ final class TopBarLayout {
     /** Baseline of text whose cap height is centred on centre. */
     static int baselineY(int centre, int capHeight) { return centre + capHeight / 2; }
 
+    /** Baseline of the greeting slot: 100 dp in split; under the date in tvos (79 dp), or 59 dp (the date's own line) when the date is off. */
+    static int greetingBaselineY(String mode, boolean dateOn, float density) {
+        if (Config.TOP_BAR_MODE_SPLIT.equals(mode)) return Math.round(100 * density);
+        return Math.round((dateOn ? 79 : 59) * density);
+    }
+
     /** Where the pieces of the split row start (ink x), and where the row ends. ampmX and sepX use the closed-up row when there is no AM/PM. */
     static final class SplitRow {
         final int ampmX, sepX, dateX, end;

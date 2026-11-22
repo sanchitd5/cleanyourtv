@@ -15,6 +15,12 @@ public class TopBarLayoutTest {
         assertEquals(108, TopBarLayout.centreY("tvos", 2f));
     }
 
+    @Test public void theGreetingSlot() {
+        assertEquals(200, TopBarLayout.greetingBaselineY("split", true, 2f));
+        assertEquals(158, TopBarLayout.greetingBaselineY("tvos", true, 2f));
+        assertEquals(118, TopBarLayout.greetingBaselineY("tvos", false, 2f));
+    }
+
     @Test public void theSplitRow() {
         TopBarLayout.SplitRow r = TopBarLayout.splitRow(114, 239, 43, 203);
         assertEquals(369, r.ampmX);
