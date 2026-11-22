@@ -863,14 +863,14 @@ final class Config {
             inputTilesShowEmpty = bool(json, "input_tiles_show_empty", inputTilesShowEmpty);
             inputLogos = stringList(json, "input_logos", inputLogos);
             greetingOnce = bool(json, "greeting_once", greetingOnce);
-            homeIdleCalmSeconds = integer(json, "home_idle_calm_seconds", homeIdleCalmSeconds, 0, HOME_IDLE_CALM_MAX);
-            homeIdleDimSeconds = integer(json, "home_idle_dim_seconds", homeIdleDimSeconds, 0, HOME_IDLE_DIM_MAX);
+            homeIdleCalmSeconds = integer(json, "home_idle_calm_seconds", homeIdleCalmSeconds, 0, 600);
+            homeIdleDimSeconds = integer(json, "home_idle_dim_seconds", homeIdleDimSeconds, 0, 3600);
             homeIdleShift = bool(json, "home_idle_shift", homeIdleShift);
             wallpaperCaptionSeconds = integer(json, "wallpaper_caption_seconds", wallpaperCaptionSeconds, 0, 600);
             clockShiftSeconds = integer(json, "clock_shift_seconds", clockShiftSeconds, 15, 600);
-            clockDimAfterMinutes = integer(json, "clock_dim_after_minutes", clockDimAfterMinutes, 0, CLOCK_DIM_AFTER_MAX);
+            clockDimAfterMinutes = integer(json, "clock_dim_after_minutes", clockDimAfterMinutes, 0, 240);
             clockDimFloor = integer(json, "clock_dim_floor", clockDimFloor, 10, 100);
-            clockBlankAfterMinutes = integer(json, "clock_blank_after_minutes", clockBlankAfterMinutes, 0, CLOCK_BLANK_AFTER_MAX);
+            clockBlankAfterMinutes = integer(json, "clock_blank_after_minutes", clockBlankAfterMinutes, 0, 720);
             glowStyle = string(json, "glow_style", glowStyle);
             glassStyle = string(json, "glass_style", glassStyle);
         }
