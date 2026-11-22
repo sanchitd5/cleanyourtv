@@ -228,6 +228,7 @@ public final class LauncherSettingsActivity extends Activity {
         homeRows.add(new HomeRow(Config.CLOCK_BLANK_AFTER_KEY, R.string.clock_blank_label, Config.CLOCK_BLANK_AFTER_CHOICES, Fmt.MINUTES_OFF));
         homeRows.add(new HomeRow(Config.SCREENSAVER_PHOTOS_KEY, R.string.screensaver_photos_label, Config.SWITCH_CHOICES, Fmt.PHOTOS));
         homeRows.add(new HomeRow(Config.REDUCED_MOTION_KEY, R.string.reduced_motion_label, Config.SWITCH_CHOICES, Fmt.SWITCH));
+        homeRows.add(new HomeRow(Config.WATERMARK_SHOW_KEY, R.string.watermark_label, Config.SWITCH_CHOICES, Fmt.SWITCH));   // watermark
         float dp = getResources().getDisplayMetrics().density;
         for (HomeRow row : homeRows) {
             TextView view = new TextView(this, null, 0, R.style.SettingsRow);

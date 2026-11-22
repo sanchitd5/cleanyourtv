@@ -37,6 +37,8 @@ final class HomeIdle {
     private long since;
     private int applied;            // StillGuard.CALM / DIM bits applied
     private int orbitStep = -1;     // last orbit step applied
+    private View watermark;         // watermark: the credit line, or null
+    private boolean watermarkGone;  // watermark: faded out by the calm stage
     private boolean captionBaseKnown;
     private float captionBaseX, captionBaseY;
     private int rampBase = 255;
@@ -62,9 +64,15 @@ final class HomeIdle {
         rampAnimator.addUpdateListener(a -> ramp().setAlpha((int) a.getAnimatedValue()));
     }
 
+    /** watermark: the credit line drifts with the header and fades at the calm stage. */
+    void watermark(View view) {
+        watermark = view;
+    }
+
     /** True when the config asks for any stage at all. */
     static boolean wanted(Config cfg) {
-        return cfg.homeIdleCalmSeconds > 0 || cfg.homeIdleDimSeconds > 0 || cfg.homeIdleShift;
+        return cfg.homeIdleCalmSeconds > 0 || cfg.homeIdleDimSeconds > 0 || cfg.homeIdleShift
+                || !cfg.watermark.isEmpty();
     }
 
     private Drawable ramp() {
@@ -90,7 +98,7 @@ final class HomeIdle {
     void poke() {
         if (!running) return;
         handler.removeCallbacks(tick);
-        if (applied != 0 || orbitStep >= 0) restore(reduced ? 90 : WAKE_MS);
+        if (applied != 0 || orbitStep >= 0 || watermarkGone) restore(reduced ? 90 : WAKE_MS);
         since = SystemClock.uptimeMillis();
         schedule();
     }
@@ -100,6 +108,7 @@ final class HomeIdle {
         long next = Long.MAX_VALUE;
         if (calmMs > 0 && (applied & StillGuard.CALM) == 0) next = Math.min(next, calmMs);
         if (dimMs > 0 && (applied & StillGuard.DIM) == 0) next = Math.min(next, dimMs);
+        if (watermark != null && !watermarkGone) next = Math.min(next, Watermark.hideAfterMs(calmMs, dimMs));   // watermark
         if (shift) next = Math.min(next, StillGuard.ORBIT_START_MS + (orbitStep + 1) * StillGuard.ORBIT_EVERY_MS);
         if (next == Long.MAX_VALUE) return;
         handler.postDelayed(tick, Math.max(0L, next - idle));
@@ -112,6 +121,10 @@ final class HomeIdle {
         if ((stage & StillGuard.CALM) != 0 && (applied & StillGuard.CALM) == 0) calm();
         if ((stage & StillGuard.DIM) != 0 && (applied & StillGuard.DIM) == 0) dim();
         applied |= stage;
+        if (watermark != null && !watermarkGone && idle >= Watermark.hideAfterMs(calmMs, dimMs)) {   // watermark
+            watermarkGone = true;
+            watermark.animate().alpha(0f).setDuration(ms(CALM_MS)).setInterpolator(standard).start();
+        }
         if (shift) {
             int step = StillGuard.orbitStep(idle);
             if (step > orbitStep) orbit(step);
@@ -153,6 +166,7 @@ final class HomeIdle {
         float[] o = StillGuard.orbit(step);
         float x = o[0] * density, y = o[1] * density;
         header.animate().translationX(x).translationY(y).setDuration(ms(ORBIT_MS)).setInterpolator(standard).start();
+        if (watermark != null) watermark.animate().translationX(x).translationY(y).setDuration(ms(ORBIT_MS)).setInterpolator(standard).start();   // watermark
         if (caption != null) {
             caption.animate().translationX(captionBaseX + x).translationY(captionBaseY + y)
                     .setDuration(ms(ORBIT_MS)).setInterpolator(standard).start();
@@ -163,6 +177,7 @@ final class HomeIdle {
         rampAnimator.cancel();
         hero.animate().cancel();
         header.animate().cancel();
+        if (watermark != null) watermark.animate().cancel();   // watermark
         grid.animate().cancel();
         glass.animate().cancel();
         if (caption != null) caption.animate().cancel();
@@ -171,15 +186,22 @@ final class HomeIdle {
     /** Everything back to full strength over ms (0 snaps), and the stages armed again. */
     private void restore(long ms) {
         boolean dimmed = (applied & StillGuard.DIM) != 0, moved = orbitStep >= 0, calmed = (applied & StillGuard.CALM) != 0;
+        boolean wmGone = watermarkGone;   // watermark
         applied = 0;
         orbitStep = -1;
-        if (!dimmed && !moved && !calmed) return;
+        watermarkGone = false;
+        if (!dimmed && !moved && !calmed && !wmGone) return;
         cancelAnimations();
         boolean glassUp = glass.getAlpha() > 0.01f;
         if (ms <= 0) {
             header.setAlpha(1f);
             header.setTranslationX(0f);
             header.setTranslationY(0f);
+            if (watermark != null) {   // watermark
+                watermark.setAlpha(1f);
+                watermark.setTranslationX(0f);
+                watermark.setTranslationY(0f);
+            }
             grid.setAlpha(1f);
             if (glassUp) glass.setAlpha(1f);
             if (calmed && heroShown.getAsBoolean()) hero.setAlpha(1f);
@@ -193,6 +215,9 @@ final class HomeIdle {
                 header.animate().alpha(1f).setDuration(ms).setInterpolator(easeOut).start();
                 grid.animate().alpha(1f).setDuration(ms).setInterpolator(easeOut).withLayer().start();
                 if (glassUp) glass.animate().alpha(1f).setDuration(ms).setInterpolator(easeOut).start();
+            }
+            if (watermark != null) {   // watermark
+                watermark.animate().alpha(1f).translationX(0f).translationY(0f).setDuration(ms).setInterpolator(easeOut).start();
             }
             if (moved) {
                 header.animate().translationX(0f).translationY(0f).setDuration(ms).setInterpolator(easeOut).start();

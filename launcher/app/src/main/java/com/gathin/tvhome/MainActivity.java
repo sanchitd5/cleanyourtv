@@ -673,6 +673,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                     ? ((android.graphics.drawable.LayerDrawable) findViewById(R.id.heroScrim).getBackground()).getDrawable(0) : null;
             homeIdle = new HomeIdle(cfg, density, reducedMotion, header, hero, grid, glass,
                     topShelf ? wallpaperPlayer.caption() : null, ramp, 255, () -> heroShown);
+            homeIdle.watermark(Watermark.attach(this, root, cfg.watermark));   // watermark: null when there is no text
         }
         rtlAppGrid = getResources().getBoolean(R.bool.rtl_app_grid);
         // Mirror only the app grid; the header and other locales keep their own layouts.
