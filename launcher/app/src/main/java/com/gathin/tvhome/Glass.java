@@ -17,12 +17,24 @@ import android.widget.TextView;
 final class Glass {
     private Glass() { }
 
-    private static volatile boolean glassOn, reduceTransparency;
+    private static volatile boolean glassOn, reduceTransparency, animations = true, reducedMotion;
 
     /** Reads the two settings that matter here. Called once Home has its {@link Config}; every activity of the process may call it. */
     static void configure(Config cfg) {
         glassOn = cfg.glassSurfaces;
         reduceTransparency = cfg.glassReduceTransparency;
+        animations = cfg.animations;
+        reducedMotion = cfg.reducedMotion;
+    }
+
+    /** The theme's {@code animations} key. */
+    static boolean animations() {
+        return animations;
+    }
+
+    /** The theme's {@code reduced_motion} key. */
+    static boolean reducedMotion() {
+        return reducedMotion;
     }
 
     static boolean on() {
@@ -41,6 +53,7 @@ final class Glass {
         final float radius = radiusDp * density;
         final GlassPanelDrawable drawable = new GlassPanelDrawable(radius, density);
         drawable.setPolicy(true, reduceTransparency, homeHosted);
+        drawable.setFadeAllowed(animations && !reducedMotion);
         panel.setBackground(drawable);
         panel.setOutlineProvider(new ViewOutlineProvider() {
             @Override
