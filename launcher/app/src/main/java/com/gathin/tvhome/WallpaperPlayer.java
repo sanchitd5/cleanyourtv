@@ -58,6 +58,8 @@ final class WallpaperPlayer implements MediaPlayer.OnInfoListener, MediaPlayer.O
     /** wallpaper_captions: the shown picture's name from wallpapers/captions.txt; null when off or there are none. */
     private final TextView caption;
     private final Map<String, String> names;
+    /** The grid is scrolled away from the dock, so the caption is faded out (scrolledAway). */
+    private boolean captionAway;
     /** wallpaper_moods: the collection's groups by time of day; empty rotates through all of it. */
     private final Map<String, Set<String>> moods;
     /** config.xml latitude and longitude, for the sun's times. */
@@ -428,8 +430,26 @@ final class WallpaperPlayer implements MediaPlayer.OnInfoListener, MediaPlayer.O
                 ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.END);
         params.topMargin = Math.round(137 * dp) - pad;
         params.setMarginEnd(Math.round(62 * dp) - pad);
-        root.addView(text, params);
+        // In a holder of its own, so scrolling can fade it (scrolledAway) without fighting the picture-change fade.
+        // The holder fills the screen and the caption keeps its own margins in it, so dockCaption's setY (the
+        // top_shelf docking) still works in screen coordinates.
+        FrameLayout holder = new FrameLayout(context);
+        holder.addView(text, params);
+        root.addView(holder, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT));
         return text;
+    }
+
+    /**
+     * Home scrolled away from the dock (true) or back to it (false). The caption sits on the screen, not in the
+     * grid, so rows scrolled up under it would put the text over the tiles: it fades out while the grid is scrolled.
+     */
+    void scrolledAway(boolean away) {
+        if (caption == null || away == captionAway) return;
+        captionAway = away;
+        View holder = (View) caption.getParent();
+        holder.animate().cancel();
+        holder.animate().alpha(away ? 0f : 1f).setDuration(away ? 150 : 300).start();
     }
 
     /** The displayed picture's name, faded across a change; a picture without a name hides the caption. */
@@ -498,6 +518,11 @@ final class WallpaperPlayer implements MediaPlayer.OnInfoListener, MediaPlayer.O
                 options.inTargetDensity = scale[1];
             }
             options.inPreferredConfig = config;
+            // Into sRGB once, here. A photo with an Adobe RGB or Display P3 profile otherwise keeps that colour space
+            // and the GPU converts the full-screen picture on every frame: ~90% late frames on a MiTV-MOOQ1 (Mali,
+            // Android 10) against 0% for the same picture without the profile. (Upstream; now in the shared decode,
+            // so ClockScene's stills get it too.)
+            options.inPreferredColorSpace = android.graphics.ColorSpace.get(android.graphics.ColorSpace.Named.SRGB);
             options.inMutable = mutable;
             return BitmapFactory.decodeFile(file.getPath(), options);
         } catch (Exception | OutOfMemoryError failure) {
