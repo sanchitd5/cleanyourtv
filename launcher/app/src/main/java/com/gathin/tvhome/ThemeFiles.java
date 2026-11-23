@@ -8,6 +8,8 @@ final class ThemeFiles {
     static final String WALLPAPERS = "wallpapers";
     /** input_logos: a theme's logo files for HDMI devices live in inputs/, named as a collection image is. */
     static final String INPUTS = "inputs";
+    /** wallpaper_feeds: written by the wallpaper-feeds addon, never by a theme push, so a theme change keeps it. */
+    static final String FEEDS = "feeds";
     /** The names tools/theme.sh accepts for a collection image, and the types WallpaperRotation reads. */
     private static final Pattern IMAGE = Pattern.compile("[A-Za-z0-9_.-]+\\.(jpg|jpeg|png|webp)",
             Pattern.CASE_INSENSITIVE);
@@ -29,6 +31,12 @@ final class ThemeFiles {
         }
         if (segments.size() == 2 && INPUTS.equals(segments.get(0)) && collectionImage(segments.get(1))) {
             return INPUTS + "/" + segments.get(1);
+        }
+        // wallpaper_feeds: the wallpaper-feeds addon's downloads (stills, clips and their captions.txt).
+        if (segments.size() == 2 && FEEDS.equals(segments.get(0))
+                && (collectionImage(segments.get(1)) || clip(segments.get(1))
+                || WallpaperCaptions.FILE_NAME.equals(segments.get(1)))) {
+            return FEEDS + "/" + segments.get(1);
         }
         // h-guard: screensaver_wallpapers' folder (stills and their captions.txt).
         if (segments.size() == 2 && ScreensaverStills.FOLDER.equals(segments.get(0))

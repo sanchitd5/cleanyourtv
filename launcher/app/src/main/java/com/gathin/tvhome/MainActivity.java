@@ -122,6 +122,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private boolean homeIgnoreChannelKeys;
     /** Launcher settings' change count this Home was built with (see onResume). */
     private long settingsRevision;
+    /** wallpaper_feeds: Config.feedsStamp at the last build of Home. */
+    private String feedsStamp = "";
     /** Idle time on Home before ClockActivity; 0 is off (config.xml, home_idle_clock_minutes). */
     private long idleClockMs;
     /** Back on Home opens ClockActivity (config.xml, back_opens_clock). */
@@ -513,6 +515,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         // off the list (needs WRITE_SECURE_SETTINGS, granted by build-and-install with RESTORE_KEY_SERVICES=1).
         if (cfg.restoreKeyServices) ServiceRepair.restore(this);
         settingsRevision = settingsRevision();
+        feedsStamp = Config.feedsStamp(this);
         applyHandler(InputsRequestActivity.class.getName(), cfg.handleViewInputs);
         applyHandler("com.gathin.tvhome.QuickPanel", cfg.quickPanelShortcuts);
         settingsKeycodes = cfg.settingsKeycodes;
@@ -1180,6 +1183,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             recreate();
             return;
         }
+        // wallpaper_feeds: the addon fetched or dropped pictures while Home was away; rebuild with the new set.
+        if (!feedsStamp.equals(Config.feedsStamp(this))) {
+            recreate();
+            return;
+        }
         restartIdleClock();
         if (homeIdle != null) homeIdle.start();
         promptsPaused = false;
@@ -1250,6 +1258,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             // The old activity must not consume the pending action, or rebuild a second time in onResume.
             settingsRecreationPending = true;
             settingsRevision = settingsRevision();
+            feedsStamp = Config.feedsStamp(this);
             recreate();
         }
     }

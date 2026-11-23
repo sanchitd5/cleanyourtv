@@ -708,6 +708,24 @@ final class Config {
         return ctx.getExternalFilesDir(null);
     }
 
+    /** wallpaper_feeds without a rotation of the theme's own: a new feed picture every hour. */
+    static final int FEEDS_ROTATION_MINUTES = 60;
+
+    /** The wallpaper-feeds addon's folder when the theme turns wallpaper_feeds on, else null. */
+    static File feedsDir(File dir, JSONObject json) {
+        return dir != null && json != null && bool(json, "wallpaper_feeds", false) ? new File(dir, ThemeFiles.FEEDS) : null;
+    }
+
+    /**
+     * Changes when the addon adds or removes a feed file (the folder's mtime), so Home can rebuild on its next
+     * resume. One stat, no config read: with wallpaper_feeds off nothing writes the folder, so it never changes.
+     */
+    static String feedsStamp(Context ctx) {
+        File dir = dir(ctx);
+        File feeds = dir == null ? null : new File(dir, ThemeFiles.FEEDS);
+        return feeds == null || !feeds.isDirectory() ? "" : String.valueOf(feeds.lastModified());
+    }
+
     static Config load(Context ctx) {
         Resources res = ctx.getResources();
         List<String> dock = new ArrayList<>(Arrays.asList(res.getStringArray(R.array.dock_apps)));
@@ -1051,6 +1069,15 @@ final class Config {
             wallpapers.addAll(WallpaperRotation.images(new File(dir, "wallpapers")));
         }
         if (wallpapers.isEmpty() && wallpaper != null) wallpapers.add(wallpaper);
+        // wallpaper_feeds: the wallpaper-feeds addon's downloads stand in for the theme's collection once there are
+        // any; until then (or with the addon gone) the theme's own pictures stay.
+        File feeds = feedsDir(dir, json);
+        List<File> feedImages = feeds != null && wallpaperEnabled ? WallpaperRotation.images(feeds) : Collections.emptyList();
+        if (!feedImages.isEmpty()) {
+            wallpapers.clear();
+            wallpapers.addAll(feedImages);
+            if (rotationMinutes == 0) rotationMinutes = FEEDS_ROTATION_MINUTES;
+        }
         // An on-TV wallpaper pick overrides the theme: a filename from the wallpapers/
         // collection, or "none". Unset means the theme decides (off by default).
         String wallpaperChoice = choices.getString(WALLPAPER_CHOICE_KEY, null);
@@ -1066,6 +1093,10 @@ final class Config {
         boolean videoOn = chosenSwitch(choices.getInt(WALLPAPER_VIDEO_KEY, -1), json != null && bool(json, "wallpaper_video", false));
         List<File> videos = chosen == null && wallpaperEnabled && dir != null && videoOn
                 ? WallpaperRotation.videos(new File(dir, "wallpapers")) : Collections.emptyList();
+        if (chosen == null && wallpaperEnabled && videoOn && feeds != null) {
+            List<File> feedClips = WallpaperRotation.videos(feeds);
+            if (!feedClips.isEmpty()) videos = feedClips;
+        }
         int videoMinutes = chosenTiming(choices.getInt(VIDEO_MINUTES_KEY, -1),
                 json == null ? 0 : integer(json, "wallpaper_video_rotation_minutes", 10, 0, 1440), 1440);
         // A festive skin comes only from a theme; config.xml has no festival. seasonal_skin names one the same way

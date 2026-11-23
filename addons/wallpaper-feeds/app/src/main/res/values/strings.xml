@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Wallpaper feeds</string>
+    <string name="source_aerials">Apple TV aerial videos</string>
+    <string name="source_bing">Bing photo of the day</string>
+    <string name="source_wikimedia">Wikimedia picture of the day</string>
+    <string name="refresh_now">Refresh now</string>
+</resources>

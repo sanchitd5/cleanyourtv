@@ -86,4 +86,18 @@ public class ThemeFilesTest {
         assertNull(ThemeFiles.path(Collections.singletonList("inputs")));
         assertNull(ThemeFiles.path(Arrays.asList("inputs", "notes.txt")));
     }
+
+    @Test public void theFeedsFolderTakesStillsClipsAndCaptions() {
+        assertEquals("feeds/bing-20261123.jpg", ThemeFiles.path(Arrays.asList("feeds", "bing-20261123.jpg")));
+        assertEquals("feeds/aerial-a1b2.mp4", ThemeFiles.path(Arrays.asList("feeds", "aerial-a1b2.mp4")));
+        assertEquals("feeds/captions.txt", ThemeFiles.path(Arrays.asList("feeds", "captions.txt")));
+        assertNull(ThemeFiles.path(Collections.singletonList("feeds")));
+        assertNull(ThemeFiles.path(Arrays.asList("feeds", "..")));
+        assertNull(ThemeFiles.path(Arrays.asList("feeds", "../config.json")));
+        assertNull(ThemeFiles.path(Arrays.asList("feeds", "a.mp4.part")));
+        assertNull(ThemeFiles.path(Arrays.asList("feeds", "notes.txt")));
+        assertNull(ThemeFiles.path(Arrays.asList("feeds", "sub", "a.jpg")));
+        // Clearing the theme's collection never touches the feeds.
+        assertFalse(ThemeFiles.isCollection(Collections.singletonList("feeds")));
+    }
 }

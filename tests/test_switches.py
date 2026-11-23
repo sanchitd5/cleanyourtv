@@ -65,7 +65,7 @@ SCREENSHOT_WANTED |= {
     "input_logos", "input_group", "home_idle_shift", "home_idle_dim_seconds", "home_idle_calm_seconds",
     "greeting_once", "glass_surfaces", "glass_reduce_transparency", "glass_live_backdrop", "font",
     "focus_sheen", "focus_parallax", "clock_shift_seconds", "clock_dim_floor", "clock_dim_after_minutes",
-    "clock_blank_after_minutes", "clock_aerial",
+    "clock_blank_after_minutes", "clock_aerial", "wallpaper_feeds",
 }
 
 
