@@ -55,6 +55,9 @@ SHIPPED = {
     "android.permission.ACCESS_FINE_LOCATION",
     "android.permission.WRITE_SECURE_SETTINGS",
     "yandex.tv.permission.ACCESS_TV_SOURCE",
+    # Horizon fork, wallpaper_feeds: hands a staged Wallpaper feeds APK to the system installer, which asks
+    # the owner itself (FeedsApp). Not a network permission: the add-on does the downloads.
+    "android.permission.REQUEST_INSTALL_PACKAGES",
 }
 
 # The shapes a network connection is opened with, in plain Java and in the libraries that wrap it. A

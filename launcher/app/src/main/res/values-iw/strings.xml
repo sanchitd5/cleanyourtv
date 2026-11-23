@@ -195,4 +195,9 @@
     <string name="top_bar_split">מפוצל</string>
     <string name="top_bar_tvos">tvOS</string>
     <string name="top_bar_date_label">הצגת תאריך</string>
+    <string name="feeds_app_title">להתקין את Wallpaper feeds?</string>
+    <string name="feeds_app_body">Wallpaper feeds מביאה למסך הבית את סרטוני הרחפן של Apple TV ואת תמונות היום של Bing ושל Wikimedia. היא מורידה אותם בעצמה; מסך הבית נשאר לא מקוון. הטלוויזיה תבקש ממך לאשר בשלב הבא.</string>
+    <string name="feeds_app_later">לא עכשיו</string>
+    <string name="feeds_app_install">התקנה</string>
+    <string name="feeds_app_failed">Wallpaper feeds לא הותקנה: %1$s</string>
 </resources>
