@@ -1093,7 +1093,11 @@ final class Config {
         boolean videoOn = chosenSwitch(choices.getInt(WALLPAPER_VIDEO_KEY, -1), json != null && bool(json, "wallpaper_video", false));
         List<File> videos = chosen == null && wallpaperEnabled && dir != null && videoOn
                 ? WallpaperRotation.videos(new File(dir, "wallpapers")) : Collections.emptyList();
-        if (chosen == null && wallpaperEnabled && videoOn && feeds != null) {
+        // Once the feeds have arrived they own the background: only their aerials play, never the theme's own clips
+        // over the feed pictures (with no aerials yet, the feed pictures show still).
+        if (chosen == null && feeds != null && !feedImages.isEmpty()) {
+            videos = wallpaperEnabled && videoOn ? WallpaperRotation.videos(feeds) : Collections.emptyList();
+        } else if (chosen == null && wallpaperEnabled && videoOn && feeds != null) {
             List<File> feedClips = WallpaperRotation.videos(feeds);
             if (!feedClips.isEmpty()) videos = feedClips;
         }

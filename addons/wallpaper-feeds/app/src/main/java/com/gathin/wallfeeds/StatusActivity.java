@@ -12,6 +12,7 @@ import android.view.Gravity;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 
 /** Which feeds to fetch, what the last refresh did, and a button to refresh now. */
@@ -20,11 +21,13 @@ public class StatusActivity extends Activity {
     private final Runnable tick = new Runnable() {
         @Override public void run() {
             showStatus();
-            handler.postDelayed(this, 2000);
+            handler.postDelayed(this, 1000);
         }
     };
     private SharedPreferences prefs;
     private TextView status;
+    private TextView progressText;
+    private ProgressBar bar;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -61,6 +64,16 @@ public class StatusActivity extends Activity {
         lp.topMargin = dp(16);
         root.addView(refresh, lp);
 
+        progressText = new TextView(this);
+        progressText.setTextColor(Color.WHITE);
+        progressText.setTextSize(TypedValue.COMPLEX_UNIT_SP, 20);
+        progressText.setPadding(0, dp(28), 0, dp(10));
+        root.addView(progressText);
+
+        bar = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
+        bar.setMax(1000);
+        root.addView(bar, new LinearLayout.LayoutParams(dp(640), dp(10)));
+
         status = new TextView(this);
         status.setTextColor(Color.rgb(200, 206, 224));
         status.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
@@ -84,6 +97,39 @@ public class StatusActivity extends Activity {
         super.onPause();
     }
 
+    /** The running refresh: step, item n of m, MB done of total, and the bar for the current file. */
+    private void showProgress() {
+        Fetcher.Progress p = Fetcher.PROGRESS;
+        boolean on = p.running || RefreshJob.running(this);
+        progressText.setVisibility(on ? android.view.View.VISIBLE : android.view.View.GONE);
+        bar.setVisibility(on ? android.view.View.VISIBLE : android.view.View.GONE);
+        if (!on) return;
+        if (!p.running) {
+            progressText.setText("Waiting for the network…");
+            bar.setIndeterminate(true);
+            return;
+        }
+        StringBuilder t = new StringBuilder(p.step);
+        if (p.count > 0) t.append("  ").append(p.index).append(" of ").append(p.count);
+        if (!p.item.isEmpty()) t.append("\n").append(p.item);
+        long done = p.done, total = p.total;
+        if (total > 0) {
+            int pct = (int) Math.min(100, done * 100 / total);
+            t.append("\n").append(mb(done)).append(" of ").append(mb(total)).append(" MB  ·  ").append(pct).append('%');
+            bar.setIndeterminate(false);
+            bar.setProgress((int) Math.min(1000, done * 1000 / total));
+        } else {
+            if (done > 0) t.append("\n").append(mb(done)).append(" MB");
+            bar.setIndeterminate(true);
+        }
+        progressText.setText(t);
+    }
+
+    private static String mb(long bytes) {
+        long tenths = bytes * 10 / (1024 * 1024);
+        return (tenths / 10) + "." + (tenths % 10);
+    }
+
     private CheckBox toggle(int label, String key) {
         CheckBox box = new CheckBox(this);
         box.setText(label);
@@ -96,8 +142,8 @@ public class StatusActivity extends Activity {
 
     private void showStatus() {
         long last = prefs.getLong(Fetcher.KEY_LAST_RUN, 0);
+        showProgress();
         StringBuilder s = new StringBuilder();
-        if (RefreshJob.running(this)) s.append("Refreshing…\n\n");
         if (last == 0) {
             s.append("No refresh yet.");
         } else {

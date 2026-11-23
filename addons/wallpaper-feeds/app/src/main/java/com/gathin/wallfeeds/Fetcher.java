@@ -58,6 +58,16 @@ final class Fetcher {
     private static final String USER_AGENT = "WallpaperFeeds/1.0 (cleanyourtv add-on; Android TV)";
     private static final int WIKIMEDIA_DAYS = 7;
 
+    /** What the running refresh is doing, read by StatusActivity in the same process. */
+    static final class Progress {
+        volatile boolean running;
+        volatile String step = "";     // "Pictures", "Aerial videos", ...
+        volatile String item = "";     // the file's caption or name
+        volatile int index, count;     // item index (1-based) of count, 0 when not counted
+        volatile long done, total;     // bytes of the current file; total -1 when the server gives none
+    }
+    static final Progress PROGRESS = new Progress();
+
     private final Context ctx;
     private final ContentResolver resolver;
     private final AtomicBoolean stop;
@@ -78,6 +88,8 @@ final class Fetcher {
 
     static synchronized void run(Context ctx, AtomicBoolean stop) {
         Fetcher f = new Fetcher(ctx, stop);
+        PROGRESS.running = true;
+        step("Starting", "", 0, 0);
         String status;
         try {
             status = f.refresh();
@@ -89,7 +101,9 @@ final class Fetcher {
             Log.w(TAG, "refresh failed", e);
             status = "Failed: " + e.getClass().getSimpleName() + (e.getMessage() == null ? "" : ": " + e.getMessage());
         } finally {
+            step("Finishing", "", 0, 0);
             f.finish();
+            PROGRESS.running = false;
         }
         f.prefs.edit().putString(KEY_STATUS, status).putLong(KEY_LAST_RUN, System.currentTimeMillis()).apply();
     }
@@ -109,6 +123,7 @@ final class Fetcher {
         List<String> notes = new ArrayList<>();
         List<Feeds.Item> stills = new ArrayList<>();
         if (bing) {
+            step("Checking Bing", "", 0, 0);
             try {
                 stills.addAll(Feeds.bing(get(BING, 256 * 1024)));
             } catch (IOException e) {
@@ -152,9 +167,12 @@ final class Fetcher {
     private void fetchStills(List<Feeds.Item> offered, List<String> notes) throws IOException {
         // Newest first: the names end in the date.
         Collections.sort(offered, (a, b) -> b.name.substring(b.name.indexOf('-')).compareTo(a.name.substring(a.name.indexOf('-'))));
+        int todo = 0, at = 0;
+        for (Feeds.Item item : offered) if (!held.has(item.name)) todo++;
         for (Feeds.Item item : offered) {
             if (stop.get()) throw new InterruptedIOException();
             if (held.has(item.name)) continue;
+            step("Pictures", label(item), ++at, todo);
             File part = new File(ctx.getCacheDir(), "still.part");
             try {
                 download(item.url, part, 20 * Feeds.MB);
@@ -182,6 +200,7 @@ final class Fetcher {
     private String fetchClips(List<String> notes) throws Exception {
         long budget = budget();
         String quality = Feeds.quality(hevc(3840, 2160), hevc(1920, 1080), displayWidth(), ram(), budget);
+        step("Checking Apple's aerial list", "", 0, 0);
         List<Feeds.Item> offered;
         try (InputStream in = open(AERIAL_MANIFEST, 0).getInputStream()) {
             byte[] manifest = Feeds.tarEntry(in, "entries.json", 8 * Feeds.MB);
@@ -206,10 +225,12 @@ final class Fetcher {
         for (Feeds.Item item : offered) if (!held.has(item.name)) fresh.add(item);
         Collections.shuffle(fresh);
         int fetched = 0;
+        int planned = Math.max(0, Math.min(Feeds.CLIPS_PER_RUN, Math.min(target - count(true), fresh.size())));
         for (Feeds.Item item : fresh) {
             if (fetched >= Feeds.CLIPS_PER_RUN || count(true) >= target) break;
             if (used() + Feeds.typicalBytes(quality) > budget) break;
             if (stop.get()) throw new InterruptedIOException();
+            step("Aerial videos", label(item), fetched + 1, planned);
             File part = new File(ctx.getCacheDir(), "clip.part");
             try {
                 long size = download(item.url, part, 1024 * Feeds.MB);
@@ -233,11 +254,29 @@ final class Fetcher {
 
     // ---- the launcher's folder ----
 
+    private static void step(String step, String item, int index, int count) {
+        PROGRESS.step = step;
+        PROGRESS.item = item;
+        PROGRESS.index = index;
+        PROGRESS.count = count;
+        PROGRESS.done = 0;
+        PROGRESS.total = 0;
+    }
+
+    private static String label(Feeds.Item item) {
+        String c = item.caption == null ? "" : item.caption;
+        int dot = c.indexOf(" · ");
+        return (dot > 0 ? c.substring(0, dot) : c).isEmpty() ? item.name : (dot > 0 ? c.substring(0, dot) : c);
+    }
+
     private static Uri uri(String name) {
         return new Uri.Builder().scheme("content").authority(AUTHORITY).appendPath(FOLDER).appendPath(name).build();
     }
 
     private void push(File src, String name) throws IOException {
+        PROGRESS.step = PROGRESS.step.startsWith("Saving") ? PROGRESS.step : "Saving to Home · " + PROGRESS.step;
+        PROGRESS.done = 0;
+        PROGRESS.total = src.length();
         try (InputStream in = new FileInputStream(src); OutputStream out = resolver.openOutputStream(uri(name), "w")) {
             if (out == null) throw new IOException("the launcher gave no stream for " + name);
             copy(in, out, Long.MAX_VALUE);
@@ -440,6 +479,8 @@ final class Fetcher {
             if (!resumed) have = 0;
             long rest = c.getContentLengthLong();
             expected = rest < 0 ? -1 : have + rest;
+            PROGRESS.total = expected;
+            PROGRESS.done = have;
             if (expected > maxBytes) throw new IOException("file is " + expected / Feeds.MB + " MB");
             StatFs fs = volume();
             if (rest > 0 && !Feeds.fits(fs.getTotalBytes(), fs.getAvailableBytes(), rest)) {
@@ -466,6 +507,7 @@ final class Fetcher {
             total += n;
             if (total > max) throw new IOException("larger than expected");
             out.write(buf, 0, n);
+            PROGRESS.done += n;
         }
     }
 
