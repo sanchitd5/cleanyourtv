@@ -40,10 +40,10 @@ final class Watermark {
         float dp = context.getResources().getDisplayMetrics().density;
         TextView view = new TextView(context);
         view.setText(text);
-        view.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
-        view.setTextColor(0x59FFFFFF);
+        view.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);   // a quiet mark, read only when looked for
+        view.setTextColor(0x2EFFFFFF);   // 18% white
         view.setLetterSpacing(0.04f);
-        view.setShadowLayer(4 * dp, 0, dp, 0x66000000);
+        view.setShadowLayer(3 * dp, 0, dp, 0x40000000);
         int pad = Math.round(8 * dp);   // room for the shadow, taken back by the margins
         view.setPadding(pad, pad, pad, pad);
         view.setSingleLine(true);
