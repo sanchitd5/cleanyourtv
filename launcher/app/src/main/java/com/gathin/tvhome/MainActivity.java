@@ -334,6 +334,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private Dialog cardPrompt;
     /** Set when a decision could not be saved: no more prompts until the next resume, instead of asking in a loop. */
     private boolean promptsPaused;
+    /** wallpaper_feeds: the "Install Wallpaper feeds?" dialog while it is up. */
+    private Dialog feedsPrompt;
     /** Between onStop and onStart: Home was fully covered by an app, not just by the translucent quick panel. */
     private boolean stopped;
     /** Between onStart and onStop: Home is (at least partly) on screen. */
@@ -1462,6 +1464,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         cancelPendingFocusScroll();
         // Nothing of ours stays on screen over another app; an undecided prompt simply returns next time.
         if (cardPrompt != null) cardPrompt.dismiss();
+        if (feedsPrompt != null) feedsPrompt.dismiss();   // dismissed, not declined: asked again on return
         if (appLibrary != null) appLibrary.close();
         GlassPopup.now(openPopup);   // glass motion: no exit animation while Home leaves
         // video under panel: the panel's glass follows the playing clip, one sample a second (after the popup's dismiss stopped its own)
@@ -4160,6 +4163,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
      * the next one follows as soon as this one is answered. Nothing is shown until the owner says Show.
      */
     private void showCardPrompt() {
+        if (offerFeedsApp()) return;   // one prompt at a time; its answer chains back here
         if (!moduleCards || !tilesReady || promptsPaused || cardPrompt != null || !hasWindowFocus() || isFinishing()
                 || reordering) return;
         if (cards.isEmpty() || !CardFeature.working()) return;
@@ -4247,6 +4251,66 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         dialog.show();
         if (gm != null) gm.runOpen();
         keep.requestFocus();
+    }
+
+    /**
+     * wallpaper_feeds: a staged Wallpaper feeds APK that is not installed yet gets one question, in the card
+     * prompt's dialog. Install hands it to the system installer (which asks again); Not now and Back stop asking
+     * until another APK is staged. True when the dialog is up.
+     */
+    private boolean offerFeedsApp() {
+        if (feedsPrompt != null) return true;
+        if (!tilesReady || promptsPaused || cardPrompt != null || !hasWindowFocus() || isFinishing() || reordering
+                || !FeedsApp.offer(this)) return false;
+        View panel = getLayoutInflater().inflate(R.layout.dialog_card_prompt, root, false);
+        ((TextView) panel.findViewById(R.id.title)).setText(R.string.feeds_app_title);
+        ((TextView) panel.findViewById(R.id.body)).setText(R.string.feeds_app_body);
+        panel.findViewById(R.id.names).setVisibility(View.GONE);
+        panel.findViewById(R.id.hint).setVisibility(View.GONE);
+        ((TextView) panel.findViewById(R.id.identity)).setText(FeedsApp.PACKAGE);
+        TextView later = panel.findViewById(R.id.btnKeep);
+        TextView install = panel.findViewById(R.id.btnShow);
+        later.setText(R.string.feeds_app_later);
+        install.setText(R.string.feeds_app_install);
+        if (Glass.apply(panel, GlassSurface.DIALOG_RADIUS_DP, true)) Glass.rows((ViewGroup) panel);
+        final Dialog dialog = new Dialog(this);
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        dialog.setContentView(panel);
+        dialog.setCanceledOnTouchOutside(false);
+        Window w = dialog.getWindow();
+        if (w != null) {
+            w.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+            w.setLayout((int) (440 * density), ViewGroup.LayoutParams.WRAP_CONTENT);
+            w.setDimAmount(0.6f);
+        }
+        final boolean[] decided = {false};
+        View.OnClickListener choose = v -> {
+            if (decided[0]) return;
+            decided[0] = true;
+            dialog.dismiss();
+            feedsPrompt = null;
+            if (v.getId() == R.id.btnShow) FeedsApp.install(this);
+            else FeedsApp.decline(this);
+            restoreFocus();
+        };
+        later.setOnClickListener(choose);
+        install.setOnClickListener(choose);
+        dialog.setOnCancelListener(d -> choose.onClick(later));
+        dialog.setOnDismissListener(d -> {
+            if (feedsPrompt == dialog) feedsPrompt = null;
+        });
+        View.OnKeyListener keys = (v, keyCode, event) -> {
+            if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
+            if (keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_DPAD_DOWN) return true;
+            if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) return v.getId() == R.id.btnKeep;
+            return keyCode == KeyEvent.KEYCODE_DPAD_RIGHT && v.getId() == R.id.btnShow;
+        };
+        later.setOnKeyListener(keys);
+        install.setOnKeyListener(keys);
+        feedsPrompt = dialog;
+        dialog.show();
+        install.requestFocus();
+        return true;
     }
 
     /** Writes the owner's decision and rebuilds the tiles; focus is left where it is. */

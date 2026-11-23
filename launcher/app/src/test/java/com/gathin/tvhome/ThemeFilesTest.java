@@ -96,6 +96,10 @@ public class ThemeFilesTest {
         assertNull(ThemeFiles.path(Arrays.asList("feeds", "../config.json")));
         assertNull(ThemeFiles.path(Arrays.asList("feeds", "a.mp4.part")));
         assertNull(ThemeFiles.path(Arrays.asList("feeds", "notes.txt")));
+        // The Wallpaper feeds APK Home offers, under that one name only.
+        assertEquals("feeds/wallfeeds.apk", ThemeFiles.path(Arrays.asList("feeds", "wallfeeds.apk")));
+        assertNull(ThemeFiles.path(Arrays.asList("feeds", "other.apk")));
+        assertNull(ThemeFiles.path(Arrays.asList("wallpapers", "wallfeeds.apk")));
         assertNull(ThemeFiles.path(Arrays.asList("feeds", "sub", "a.jpg")));
         // Clearing the theme's collection never touches the feeds.
         assertFalse(ThemeFiles.isCollection(Collections.singletonList("feeds")));

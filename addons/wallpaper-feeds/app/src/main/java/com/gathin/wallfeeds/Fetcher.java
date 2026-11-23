@@ -82,7 +82,7 @@ final class Fetcher {
         try {
             status = f.refresh();
         } catch (SecurityException e) {
-            status = "The launcher refused the write: grant WRITE_SECURE_SETTINGS (build-and-install.sh does it).";
+            status = "The launcher refused the write: this app and the launcher must be built with the same key (reinstall this app after the launcher).";
         } catch (InterruptedIOException e) {
             status = "Stopped by the system; the next run picks up where this one left off.";
         } catch (Exception e) {

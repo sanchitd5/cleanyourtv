@@ -21,6 +21,13 @@
     <!-- YaOS (Yandex TV OS): HDMI, AV and the tuner all play in com.yandex.tv.live, whose activities require
          this permission (protection level normal, so it is granted at install). Ignored on other TVs. -->
     <uses-permission android:name="yandex.tv.permission.ACCESS_TV_SOURCE" />
+    <!-- wallpaper_feeds: hand a staged Wallpaper feeds APK to the system installer (FeedsApp). The installer
+         asks the person itself; nothing installs without its confirmation. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- wallpaper_feeds: lets the Wallpaper feeds app, signed with this app's key, write into feeds/ only. -->
+    <permission
+        android:name="com.gathin.tvhome.permission.WRITE_FEEDS"
+        android:protectionLevel="signature" />
 
     <!-- Android 11+ package visibility: lets the launcher list the TV apps it shows as tiles, and the
          apps that declare a module card (docs/specs/card.md). -->
@@ -235,7 +242,18 @@
             android:name=".ThemeProvider"
             android:authorities="${applicationId}.theme"
             android:exported="true"
-            android:permission="android.permission.WRITE_SECURE_SETTINGS" />
+            android:permission="android.permission.WRITE_SECURE_SETTINGS">
+            <path-permission
+                android:pathPrefix="/feeds/"
+                android:readPermission="com.gathin.tvhome.permission.WRITE_FEEDS"
+                android:writePermission="com.gathin.tvhome.permission.WRITE_FEEDS" />
+        </provider>
+
+        <!-- wallpaper_feeds: the system installer's answers for the Wallpaper feeds install. -->
+        <receiver
+            android:name=".FeedsApp$Receiver"
+            android:exported="false">
+        </receiver>
 
         <!-- The remote's Input button (KEYCODE_TV or KEYCODE_TV_INPUT) opens the input switcher, and input_key_keycodes and
          app_keys (config.xml or a theme) bring back other remote buttons; see InputKeyService. -->

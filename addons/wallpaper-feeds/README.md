@@ -25,13 +25,15 @@ It sizes itself to the TV:
 
 ## Install
 
+Build it on the machine that built the launcher: the two must share a signing key.
+
 ```sh
 TV_HOST=192.168.1.50 addons/wallpaper-feeds/build-and-install.sh
 ```
 
-The script builds the app, installs it, grants it `WRITE_SECURE_SETTINGS` (the launcher's theme provider
-only takes files from holders of it) and starts a first refresh. Then turn it on in the theme's
-`config.json`:
+The script builds the app and stages it in the launcher. Home then asks **Install Wallpaper feeds?**; choose
+Install and confirm on the TV's installer screen. The app opens and starts its first refresh. (`--adb` installs
+it straight away instead.) Then turn it on in the theme's `config.json`:
 
 ```json
 "wallpaper_feeds": true,
@@ -51,8 +53,8 @@ downloaded files from the launcher too.
   upload.wikimedia.org/thumb.wikimedia.org and sylvan.apple.com only. HTTPS only; nothing is sent but the
   requests.
 - `RECEIVE_BOOT_COMPLETED`: the twice-daily refresh stays scheduled after a reboot.
-- `WRITE_SECURE_SETTINGS`, granted by ADB: the launcher's theme provider accepts writes only from holders of
-  it. The app writes into the launcher's `feeds/` folder and touches no setting.
+- `com.gathin.tvhome.permission.WRITE_FEEDS`: the launcher's own signature permission, held only by apps
+  signed with the launcher's key. It lets this app write into the launcher's `feeds/` folder and nowhere else.
 
 sylvan.apple.com's certificate comes from Apple's own root, which Android does not carry, so the app trusts
 Apple Root CA for that one host (`res/xml/network_security_config.xml`, fingerprint in the comment there).

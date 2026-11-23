@@ -201,4 +201,10 @@
     <string name="top_bar_split">Split</string>
     <string name="top_bar_tvos">tvOS</string>
     <string name="top_bar_date_label">Show date</string>
+    <!-- wallpaper_feeds: Home offers the staged Wallpaper feeds app (FeedsApp). -->
+    <string name="feeds_app_title">Install Wallpaper feeds?</string>
+    <string name="feeds_app_body">Wallpaper feeds brings Apple TV aerials and the Bing and Wikimedia pictures of the day to Home. It downloads them itself; Home stays offline. The TV asks you to confirm next.</string>
+    <string name="feeds_app_later">Not now</string>
+    <string name="feeds_app_install">Install</string>
+    <string name="feeds_app_failed">Wallpaper feeds did not install: %1$s</string>
 </resources>

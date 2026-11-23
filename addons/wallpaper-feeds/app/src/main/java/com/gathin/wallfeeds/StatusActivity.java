@@ -31,6 +31,8 @@ public class StatusActivity extends Activity {
         super.onCreate(savedInstanceState);
         prefs = getSharedPreferences(Fetcher.PREFS, MODE_PRIVATE);
         RefreshJob.schedule(this);
+        // Just installed (Home opens this screen after its install): the first refresh now, not in 12 hours.
+        if (prefs.getLong(Fetcher.KEY_LAST_RUN, 0) == 0 && !RefreshJob.running(this)) RefreshJob.runNow(this);
 
         int pad = dp(48);
         LinearLayout root = new LinearLayout(this);

@@ -35,7 +35,7 @@ final class ThemeFiles {
         // wallpaper_feeds: the wallpaper-feeds addon's downloads (stills, clips and their captions.txt).
         if (segments.size() == 2 && FEEDS.equals(segments.get(0))
                 && (collectionImage(segments.get(1)) || clip(segments.get(1))
-                || WallpaperCaptions.FILE_NAME.equals(segments.get(1)))) {
+                || WallpaperCaptions.FILE_NAME.equals(segments.get(1)) || FeedsApp.APK.equals(segments.get(1)))) {
             return FEEDS + "/" + segments.get(1);
         }
         // h-guard: screensaver_wallpapers' folder (stills and their captions.txt).
