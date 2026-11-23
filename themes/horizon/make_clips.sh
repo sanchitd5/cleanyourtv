@@ -41,3 +41,17 @@ EOF
     -map "[out]" -c:v libx264 -profile:v high -level:v 4.1 -preset slow -crf 21 -maxrate 6500k -bufsize 13M \
     -g 60 -pix_fmt yuv420p -r 30 -movflags +faststart -map_metadata -1 "$OUT/$NAME.mp4"
 done
+
+# Each clip's caption goes into wallpapers/captions.txt once the clip exists (the repository carries only
+# the stills' lines, as the clips are not committed).
+while IFS= read -r CAP; do
+  FILE=${CAP%%	*}
+  [ -f "$OUT/$FILE" ] || continue
+  grep -q "^$FILE	" "$OUT/captions.txt" 2>/dev/null || printf '%s\n' "$CAP" >> "$OUT/captions.txt"
+done <<'CAPTIONS'
+01-aurora-to-sunrise.mp4	Aurora over moonlit clouds, then first light · NASA, ISS Expedition 65
+02-city-lights-and-aurora.mp4	City lights at night, then an aurora · NASA, ISS Expedition 65
+03-aurora-over-night-clouds.mp4	Aurora and city lights at night · NASA, ISS Expedition 65
+04-storm-and-coast.mp4	A storm system and coastlines by day · NASA, ISS Expedition 65
+05-day-into-night.mp4	Day turning to night over the limb · NASA, ISS Expedition 65
+CAPTIONS
