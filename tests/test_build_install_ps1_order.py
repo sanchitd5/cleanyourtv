@@ -24,7 +24,7 @@ class BuildInstallPs1OrderTest(unittest.TestCase):
     def test_home_moves_only_after_the_start_check(self):
         start = CODE.index("am start -W")
         check = CODE.index("the new launcher did not start")
-        homes = [m.start() for m in re.finditer(r"set-home-activity --user 0 com\.gathin\.tvhome", CODE)]
+        homes = [m.start() for m in re.finditer(r"set-home-activity --user 0 \$launcherPkg", CODE)]
         self.assertTrue(homes, "the script still sets the new launcher as Home")
         self.assertLess(start, check)
         for at in homes:

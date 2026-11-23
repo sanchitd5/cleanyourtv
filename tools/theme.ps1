@@ -1,5 +1,5 @@
 # Windows version of theme.sh: push a theme folder (config.json, and optionally a wallpaper.jpg or a
-# wallpapers/ collection) to the launcher on the TV and restart Home. See themes/README.md for the keys.
+# wallpapers/ collection, or an inputs/ folder of device logos) to the launcher on the TV and restart Home. See themes/README.md for the keys.
 #
 # Usage: tools\theme.ps1 -TvHost 192.168.1.50 themes\aurora
 #        tools\theme.ps1 -TvHost 192.168.1.50 -Reset
@@ -68,7 +68,7 @@ if (-not (Test-Path -LiteralPath $py)) {
     [Console]::Error.WriteLine('run: python -m venv tools\venv; tools\venv\Scripts\python.exe -m pip install -r tools\requirements.txt. Nothing was sent to the TV.')
     exit 2
 }
-$pkg = 'com.gathin.tvhome'
+$pkg = 'com.sanchitdang.tvhome'
 # Runs tools\tv.py or b64push.py and stops on a non-zero exit: 'Stop' only covers cmdlets, so a failed
 # native call would otherwise fall through to "Theme ... is on the TV".
 function Invoke-Tv {
@@ -118,10 +118,23 @@ function Drop($name) { "rm -f $dir/$name 2>/dev/null; content delete --uri $uri/
 # pictures is read back from it, so a reset that left the pictures behind still shows the theme it just removed.
 # Both paths use this one string (the same one theme.sh has).
 $clearWallpapers = "rm -f $dir/wallpapers/*.[jJ][pP][gG] $dir/wallpapers/*.[jJ][pP][eE][gG] $dir/wallpapers/*.[pP][nN][gG] $dir/wallpapers/*.[wW][eE][bB][pP] 2>/dev/null; content delete --uri $uri/wallpapers 2>/dev/null"
+# wallpaper_video's clips (wallpapers/*.mp4) are not in that string, as in theme.sh: a clip is tens of megabytes,
+# so a push leaves the ones the theme still has, at the same size, where they are. This removes the others - the
+# names in $keep stay, so all of them for an empty $keep, which is what -Reset and a theme without clips ask for.
+function DropClips($keep) { "for f in $dir/wallpapers/*.[mM][pP]4; do [ -e `"`$f`" ] || continue; case `" $keep `" in *`" `${f##*/} `"*) ;; *) rm -f `"`$f`" 2>/dev/null; content delete --uri $uri/wallpapers/`${f##*/} 2>/dev/null ;; esac; done" }
+# input_logos' pictures (inputs/*), as in theme.sh: the names in $keep stay, all of them for an empty $keep.
+function DropInputs($keep) { "for f in $dir/inputs/*; do [ -e `"`$f`" ] || continue; case `" $keep `" in *`" `${f##*/} `"*) ;; *) rm -f `"`$f`" 2>/dev/null; content delete --uri $uri/inputs/`${f##*/} 2>/dev/null ;; esac; done" }
+
+# --- screensaver_wallpapers: the theme folder of stills the clock screensaver shows (h-guard), as in theme.sh ---
+# A still the TV already has at the same size is left alone and one the theme no longer has is deleted;
+# $ssDefault is the folder -Reset and a theme without the key clean.
+$ssDefault = 'screensaver'
+function DropStills($folder, $keep) { "for f in $dir/$folder/*; do [ -e `"`$f`" ] || continue; case `" $keep `" in *`" `${f##*/} `"*) ;; *) rm -f `"`$f`" 2>/dev/null; content delete --uri $uri/$folder/`${f##*/} 2>/dev/null ;; esac; done" }
+# --- end screensaver_wallpapers ---
 
 if ($Reset) {
     $checkPut = $true
-    Invoke-Tv tv.py "mkdir -p $dir 2>/dev/null; $(Drop 'config.json'); $(Drop 'wallpaper.jpg'); $(Drop 'wallpapers/captions.txt'); $clearWallpapers; printf '%s' '$revision' > $tmp-theme_revision; $(Put 'theme_revision')" | Out-Null
+    Invoke-Tv tv.py "mkdir -p $dir 2>/dev/null; $(Drop 'config.json'); $(Drop 'wallpaper.jpg'); $(Drop 'wallpapers/captions.txt'); $clearWallpapers; $(DropClips ''); $(DropInputs ''); $(DropStills $ssDefault ''); printf '%s' '$revision' > $tmp-theme_revision; $(Put 'theme_revision')" | Out-Null
     & $py -I theme_restart.py
     if ($LASTEXITCODE) { throw 'Home restart recovery failed' }
     Write-Host 'reset'
@@ -158,16 +171,47 @@ if ($configBytes -gt 65536) {
 # Every collection name is checked before anything changes on the TV, as in theme.sh: a name refused halfway
 # through the push left the new config.json and part of the collection behind. b64push.py refuses '..' in a path.
 $wallpapers = Join-Path $Theme 'wallpapers'
+# $clips are wallpaper_video's (*.mp4), named by the same rule and sent last.
 $images = @()
+$clips = @()
 if (Test-Path -LiteralPath $wallpapers -PathType Container) {
     $images = @(Get-ChildItem -LiteralPath $wallpapers -File | Where-Object { $_.Extension -match '^\.(jpg|jpeg|png|webp)$' })
-    foreach ($image in $images) {
+    $clips = @(Get-ChildItem -LiteralPath $wallpapers -File | Where-Object { $_.Extension -match '^\.mp4$' })
+    foreach ($image in @($images + $clips)) {
         if ($image.Name -notmatch '^[A-Za-z0-9_.-]+$' -or $image.Name.Contains('..')) {
             [Console]::Error.WriteLine("unsupported wallpaper filename: $($image.Name) (b64push.py takes letters, digits, '.', '_' and '-', with no '..' in the name). Nothing was sent to the TV.")
             exit 2
         }
     }
 }
+# inputs/ (input_logos): pictures only, named by the same rule as a wallpaper and not starting with a dot.
+$inputs = @()
+$inputsDir = Join-Path $Theme 'inputs'
+if (Test-Path -LiteralPath $inputsDir -PathType Container) {
+    $inputs = @(Get-ChildItem -LiteralPath $inputsDir -File | Where-Object { $_.Extension -match '^\.(jpg|jpeg|png|webp)$' })
+    foreach ($input in $inputs) {
+        if ($input.Name -notmatch '^[A-Za-z0-9_.-]+$' -or $input.Name.Contains('..') -or $input.Name.StartsWith('.')) {
+            [Console]::Error.WriteLine("unsupported inputs filename: $($input.Name) (b64push.py takes letters, digits, '.', '_' and '-', with no '..' in the name and no leading '.'). Nothing was sent to the TV.")
+            exit 2
+        }
+    }
+}
+
+# --- screensaver_wallpapers: the folder's name and file names, checked before anything is sent (h-guard) ---
+$ssFolder = ''
+$ssImages = @()
+$ssName = $themeJson.screensaver_wallpapers
+if ($ssName -is [string] -and $ssName -ceq 'screensaver') { $ssFolder = $ssName }   # the one folder ThemeProvider takes
+if ($ssFolder -and (Test-Path -LiteralPath (Join-Path $Theme $ssFolder) -PathType Container)) {
+    $ssImages = @(Get-ChildItem -LiteralPath (Join-Path $Theme $ssFolder) -File | Where-Object { $_.Extension -match '^\.(jpg|jpeg|png|webp)$' })
+    foreach ($image in $ssImages) {
+        if ($image.Name -notmatch '^[A-Za-z0-9_.-]+$' -or $image.Name.Contains('..')) {
+            [Console]::Error.WriteLine("unsupported screensaver filename: $($image.Name) (letters, digits, '.', '_' and '-', with no '..'). Nothing was sent to the TV.")
+            exit 2
+        }
+    }
+}
+# --- end screensaver_wallpapers ---
 
 # Tolerated, as in theme.sh: a TV that locks Android/data still takes the files through ThemeProvider.
 Invoke-Tv tv.py "mkdir -p $dir 2>/dev/null; true" | Out-Null
@@ -189,6 +233,45 @@ if (Test-Path -LiteralPath $captions -PathType Leaf) {
 } else {
     Invoke-Tv tv.py (Drop 'wallpapers/captions.txt') | Out-Null
 }
+# wallpaper_video's clips, after everything a theme needs to look right without them, as in theme.sh: one the TV
+# already has at the same size is left alone, so only a first push, or a clip that changed, takes the minutes
+# b64push.py needs for it. With TV_ADB_BINARY set, adb's own push (tv.py --push) sends the clip instead.
+Invoke-Tv tv.py (DropClips (@($clips | ForEach-Object { $_.Name }) -join ' ')) | Out-Null
+foreach ($clip in $clips) {
+    $name = "wallpapers/$($clip.Name)"
+    $onTv = (@(Invoke-Tv tv.py "{ [ -e $dir/$name ] && wc -c < $dir/$name; } 2>/dev/null || content read --uri $uri/$name 2>/dev/null | wc -c") -join '').Trim()
+    if ($onTv -eq "$($clip.Length)") { Write-Host "$name is already on the TV"; continue }
+    if ($env:TV_ADB_BINARY) { Invoke-Tv tv.py --push $clip.FullName (Stage $name) | Out-Null } else { Invoke-Tv b64push.py $clip.FullName (Stage $name) }
+    Invoke-Tv tv.py (Put $name) | Out-Null
+}
+# input_logos' pictures: the ones the theme no longer has go, and one the TV already has with the same MD5 is left alone.
+Invoke-Tv tv.py (DropInputs (@($inputs | ForEach-Object { $_.Name }) -join ' ')) | Out-Null
+foreach ($input in $inputs) {
+    $name = "inputs/$($input.Name)"
+    $sum = (Get-FileHash -LiteralPath $input.FullName -Algorithm MD5).Hash.ToLower()
+    $onTv = ((@(Invoke-Tv tv.py "{ [ -e $dir/$name ] && md5sum < $dir/$name; } 2>/dev/null || content read --uri $uri/$name 2>/dev/null | md5sum") -join '').Trim() -split '\s+')[0]
+    if ($onTv -eq $sum) { Write-Host "$name is already on the TV"; continue }
+    Invoke-Tv b64push.py $input.FullName (Stage $name)
+    Invoke-Tv tv.py (Put $name) | Out-Null
+}
+# --- screensaver_wallpapers: push the folder (h-guard) ---
+$ssCaptions = if ($ssFolder) { Join-Path (Join-Path $Theme $ssFolder) 'captions.txt' } else { '' }
+$ssHasCaptions = $ssCaptions -and (Test-Path -LiteralPath $ssCaptions -PathType Leaf)
+$ssKeep = (@($ssImages | ForEach-Object { $_.Name }) + $(if ($ssHasCaptions) { 'captions.txt' } else { @() })) -join ' '
+$ssTarget = if ($ssFolder) { $ssFolder } else { $ssDefault }
+Invoke-Tv tv.py (DropStills $ssTarget $ssKeep) | Out-Null
+foreach ($image in $ssImages) {
+    $name = "$ssFolder/$($image.Name)"
+    $onTv = (@(Invoke-Tv tv.py "{ [ -e $dir/$name ] && wc -c < $dir/$name; } 2>/dev/null || content read --uri $uri/$name 2>/dev/null | wc -c") -join '').Trim()
+    if ($onTv -eq "$($image.Length)") { Write-Host "$name is already on the TV"; continue }
+    Invoke-Tv b64push.py $image.FullName (Stage $name)
+    Invoke-Tv tv.py (Put $name) | Out-Null
+}
+if ($ssHasCaptions) {
+    Invoke-Tv b64push.py $ssCaptions (Stage "$ssFolder/captions.txt")
+    Invoke-Tv tv.py (Put "$ssFolder/captions.txt") | Out-Null
+}
+# --- end screensaver_wallpapers ---
 Invoke-Tv tv.py "printf '%s' '$revision' > $tmp-theme_revision; $(Put 'theme_revision')" | Out-Null
 & $py -I theme_restart.py
 if ($LASTEXITCODE) { throw 'Home restart recovery failed' }

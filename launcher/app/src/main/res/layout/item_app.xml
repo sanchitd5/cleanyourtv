@@ -32,6 +32,15 @@
             android:visibility="gone"
             android:contentDescription="@null" />
 
+        <View
+            android:id="@+id/dot"
+            android:layout_width="6dp"
+            android:layout_height="6dp"
+            android:layout_gravity="top|end"
+            android:layout_margin="8dp"
+            android:background="@drawable/status_dot"
+            android:visibility="gone" />
+
         <TextView
             android:id="@+id/label"
             android:layout_width="match_parent"
@@ -47,6 +56,15 @@
             android:textSize="13sp"
             android:fontFamily="@string/font_body"
             android:visibility="gone" />
+
+        <!-- Horizon focus_sheen: one band of light, sized and given its background by FocusEffects; gone when unused. -->
+        <View
+            android:id="@+id/sheen"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:focusable="false"
+            android:importantForAccessibility="no"
+            android:visibility="invisible" />
     </FrameLayout>
 
     <TextView

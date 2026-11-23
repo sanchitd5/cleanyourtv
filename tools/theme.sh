@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Push a theme (a folder with config.json, and optionally a wallpaper.jpg or a wallpapers/ collection) to the
+# Push a theme (a folder with config.json, and optionally a wallpaper.jpg, a wallpapers/ collection, or an inputs/ folder of device logos) to the
 # launcher on the TV and restart Home so it picks it up. The launcher reads the files from its external files
 # directory and overlays config.json on its built-in config.xml; see themes/README.md for the keys.
 #
@@ -86,7 +86,7 @@ PY=venv/bin/python
 [ -x "$PY" ] || { echo "run: python3 -m venv tools/venv && tools/venv/bin/pip install -r tools/requirements.txt." \
   "Nothing was sent to the TV." >&2; exit 2; }
 export MSYS_NO_PATHCONV=1
-PKG=com.gathin.tvhome
+PKG=com.sanchitdang.tvhome
 DIR=/sdcard/Android/data/$PKG/files
 # A unique marker lets the launcher clear on-TV layout/motion choices after every theme push,
 # including a push of identical config.json bytes and --reset.
@@ -126,6 +126,15 @@ del() { echo "rm -f $DIR/$1 2>/dev/null; content delete --uri $URI/$1 2>/dev/nul
 # itself, and an on-TV pick of one of its pictures is read back from it (WallpaperRotation.chosen), so a reset
 # that left the pictures behind still shows the theme it just removed. Both paths use this one string.
 CLEAR_WALLPAPERS="rm -f $DIR/wallpapers/*.[jJ][pP][gG] $DIR/wallpapers/*.[jJ][pP][eE][gG] $DIR/wallpapers/*.[pP][nN][gG] $DIR/wallpapers/*.[wW][eE][bB][pP] 2>/dev/null; content delete --uri $URI/wallpapers 2>/dev/null"
+# wallpaper_video's clips (wallpapers/*.mp4) are not in that string: a clip is tens of megabytes, so a push leaves
+# the ones the theme still has, at the same size, where they are. This removes the others - the names in $1 are
+# kept, so all of them for an empty $1, which is what --reset and a theme without clips ask for. The shell has to
+# be able to list the folder: where it is locked out of Android/data (TCL G07, Android 11), a clip the theme no
+# longer has stays on the TV.
+drop_clips() { echo "for f in $DIR/wallpapers/*.[mM][pP]4; do [ -e \"\$f\" ] || continue; case \" $1 \" in *\" \${f##*/} \"*) ;; *) rm -f \"\$f\" 2>/dev/null; content delete --uri $URI/wallpapers/\${f##*/} 2>/dev/null ;; esac; done"; }
+# input_logos' pictures (inputs/*): small, so the same drop-the-others rule as clips, applied to every picture type.
+# The names in $1 are kept; all of them for an empty $1 (--reset, or a theme with no inputs/ folder).
+drop_inputs() { echo "for f in $DIR/inputs/*; do [ -e \"\$f\" ] || continue; case \" $1 \" in *\" \${f##*/} \"*) ;; *) rm -f \"\$f\" 2>/dev/null; content delete --uri $URI/inputs/\${f##*/} 2>/dev/null ;; esac; done"; }
 
 # Both paths end with the same restart, and both are past the point where the TV was written to. The helper's
 # own 2 ("the TV did not answer, so nothing was asked of it") describes the restart alone: on this side of the
@@ -160,8 +169,14 @@ put_on() {   # put $1, after the optional command $2 in the same shell call
     stopped "$1"
   fi
 }
+# --- screensaver_wallpapers: the theme folder of stills the clock screensaver shows (h-guard) ---
+# Pushed like wallpapers/ but kept the way clips are: a still the TV already has at the same size is left alone,
+# and one the theme no longer has is deleted. SS_DEFAULT is the folder --reset and a theme without the key clean.
+SS_DEFAULT=screensaver
+ss_drop() { echo "for f in $DIR/$1/*; do [ -e \"\$f\" ] || continue; case \" $2 \" in *\" \${f##*/} \"*) ;; *) rm -f \"\$f\" 2>/dev/null; content delete --uri $URI/$1/\${f##*/} 2>/dev/null ;; esac; done"; }
+# --- end screensaver_wallpapers ---
 if [ "${1:-}" = --reset ]; then
-  tv "mkdir -p $DIR 2>/dev/null; $(del config.json); $(del wallpaper.jpg); $(del wallpapers/captions.txt); $CLEAR_WALLPAPERS" >/dev/null
+  tv "mkdir -p $DIR 2>/dev/null; $(del config.json); $(del wallpaper.jpg); $(del wallpapers/captions.txt); $CLEAR_WALLPAPERS; $(drop_clips ""); $(drop_inputs ""); $(ss_drop "$SS_DEFAULT" "")" >/dev/null
   put_on theme_revision "printf '%s' '$REVISION' > $TMP-theme_revision"
   restart_home "the theme was removed"
   echo reset
@@ -212,22 +227,69 @@ fi
 # Every collection name is checked before anything changes on the TV: a name refused halfway through the push
 # left the new config.json and part of the collection behind. b64push.py refuses a path with '..' in it, so
 # such a name (sunset..jpg) is refused here too. The names that pass have no spaces, so NAMES splits on them.
+# CLIPS are wallpaper_video's (*.mp4), named by the same rule and sent last.
 NAMES=""
+CLIPS=""
 if [ -d "$THEME/wallpapers" ]; then
   for IMAGE in "$THEME"/wallpapers/*; do
     [ -f "$IMAGE" ] || continue
     case "$IMAGE" in
-      *.[jJ][pP][gG]|*.[jJ][pP][eE][gG]|*.[pP][nN][gG]|*.[wW][eE][bB][pP])
+      *.[jJ][pP][gG]|*.[jJ][pP][eE][gG]|*.[pP][nN][gG]|*.[wW][eE][bB][pP]|*.[mM][pP]4)
         NAME=$(basename "$IMAGE")
         if [[ ! "$NAME" =~ ^[A-Za-z0-9_.-]+$ || "$NAME" == *..* ]]; then
           echo "unsupported wallpaper filename: $NAME (b64push.py takes letters, digits, '.', '_' and '-', with no" \
             "'..' in the name). Nothing was sent to the TV." >&2
           exit 2
         fi
-        NAMES="$NAMES $NAME" ;;
+        case "$NAME" in *.[mM][pP]4) CLIPS="$CLIPS $NAME" ;; *) NAMES="$NAMES $NAME" ;; esac ;;
     esac
   done
 fi
+
+# inputs/ (input_logos): pictures only, named by the same rule as a wallpaper and not starting with a dot.
+INPUTS=""
+if [ -d "$THEME/inputs" ]; then
+  for IMAGE in "$THEME"/inputs/*; do
+    [ -f "$IMAGE" ] || continue
+    case "$IMAGE" in
+      *.[jJ][pP][gG]|*.[jJ][pP][eE][gG]|*.[pP][nN][gG]|*.[wW][eE][bB][pP])
+        NAME=$(basename "$IMAGE")
+        if [[ ! "$NAME" =~ ^[A-Za-z0-9_.-]+$ || "$NAME" == *..* || "$NAME" == .* ]]; then
+          echo "unsupported inputs filename: $NAME (b64push.py takes letters, digits, '.', '_' and '-', with no" \
+            "'..' in the name and no leading '.'). Nothing was sent to the TV." >&2
+          exit 2
+        fi
+        INPUTS="$INPUTS $NAME" ;;
+    esac
+  done
+fi
+
+# --- screensaver_wallpapers: read the folder name and check its file names before anything is sent (h-guard) ---
+SS_FOLDER="$("$PY" -I -c '
+import json, re, sys
+try:
+    with open(sys.argv[1], encoding="utf-8-sig") as handle:
+        name = json.load(handle).get("screensaver_wallpapers", "")
+except (OSError, ValueError, AttributeError):
+    name = ""
+print("screensaver" if name == "screensaver" else "")   # the one folder ThemeProvider takes
+' "$THEME/config.json" 2>/dev/null)"
+SS_NAMES=""
+if [ -n "$SS_FOLDER" ] && [ -d "$THEME/$SS_FOLDER" ]; then
+  for IMAGE in "$THEME/$SS_FOLDER"/*; do
+    [ -f "$IMAGE" ] || continue
+    case "$IMAGE" in
+      *.[jJ][pP][gG]|*.[jJ][pP][eE][gG]|*.[pP][nN][gG]|*.[wW][eE][bB][pP])
+        NAME=$(basename "$IMAGE")
+        if [[ ! "$NAME" =~ ^[A-Za-z0-9_.-]+$ || "$NAME" == *..* ]]; then
+          echo "unsupported screensaver filename: $NAME (letters, digits, '.', '_' and '-', with no '..'). Nothing was sent to the TV." >&2
+          exit 2
+        fi
+        SS_NAMES="$SS_NAMES $NAME" ;;
+    esac
+  done
+fi
+# --- end screensaver_wallpapers ---
 
 tv "mkdir -p $DIR" >/dev/null 2>&1 || true
 tv --push "$THEME/config.json" "$TMP-config.json" >/dev/null
@@ -250,6 +312,58 @@ if [ -f "$THEME/wallpapers/captions.txt" ]; then
 else
   tv "$(del wallpapers/captions.txt)" >/dev/null || stopped "removing wallpapers/captions.txt"
 fi
+# wallpaper_video's clips, after everything a theme needs to look right without them: they are the long part of
+# a push. One the TV already has at the same size is left alone, so only a first push, or a clip that changed,
+# takes that time. b64push.py carries 24 KB of a file per shell command, which is minutes for a collection; with
+# TV_ADB_BINARY set its commands are 4 KB each, so there adb's own push (tv.py --push) sends the clip instead.
+tv "$(drop_clips "$CLIPS")" >/dev/null || stopped "removing old clips"
+for NAME in $CLIPS; do
+  SIZE=$(wc -c < "$THEME/wallpapers/$NAME" | tr -d ' ')
+  ON_TV=$(tv "{ [ -e $DIR/wallpapers/$NAME ] && wc -c < $DIR/wallpapers/$NAME; } 2>/dev/null || content read --uri $URI/wallpapers/$NAME 2>/dev/null | wc -c") || stopped "wallpapers/$NAME"
+  if [ "$(printf '%s' "$ON_TV" | tr -d ' \r\n')" = "$SIZE" ]; then
+    echo "wallpapers/$NAME is already on the TV"
+    continue
+  fi
+  if [ -n "${TV_ADB_BINARY:-}" ]; then
+    tv --push "$THEME/wallpapers/$NAME" "$(stage "wallpapers/$NAME")" >/dev/null || stopped "wallpapers/$NAME"
+  else
+    "$PY" -I b64push.py "$THEME/wallpapers/$NAME" "$(stage "wallpapers/$NAME")" || stopped "wallpapers/$NAME"
+  fi
+  put_on "wallpapers/$NAME"
+done
+# input_logos' pictures: the ones the theme no longer has go, and one the TV already has with the same MD5 is left
+# alone (md5sum is missing on some firmware: the picture is then simply sent again).
+tv "$(drop_inputs "$INPUTS")" >/dev/null || stopped "removing old inputs/"
+for NAME in $INPUTS; do
+  SUM=$("$PY" -I -c 'import hashlib, sys; print(hashlib.md5(open(sys.argv[1], "rb").read()).hexdigest())' "$THEME/inputs/$NAME")
+  ON_TV=$(tv "{ [ -e $DIR/inputs/$NAME ] && md5sum < $DIR/inputs/$NAME; } 2>/dev/null || content read --uri $URI/inputs/$NAME 2>/dev/null | md5sum") || stopped "inputs/$NAME"
+  ON_TV=$(printf '%s' "$ON_TV" | tr -d '\r' | head -n 1)
+  if [ "${ON_TV%% *}" = "$SUM" ]; then
+    echo "inputs/$NAME is already on the TV"
+    continue
+  fi
+  "$PY" -I b64push.py "$THEME/inputs/$NAME" "$(stage "inputs/$NAME")" || stopped "inputs/$NAME"
+  put_on "inputs/$NAME"
+done
+# --- screensaver_wallpapers: push the folder (h-guard) ---
+SS_KEEP="$SS_NAMES"
+[ -n "$SS_FOLDER" ] && [ -f "$THEME/$SS_FOLDER/captions.txt" ] && SS_KEEP="$SS_KEEP captions.txt"
+tv "$(ss_drop "${SS_FOLDER:-$SS_DEFAULT}" "$SS_KEEP")" >/dev/null || stopped "removing old screensaver pictures"
+for NAME in $SS_NAMES; do
+  SIZE=$(wc -c < "$THEME/$SS_FOLDER/$NAME" | tr -d ' ')
+  ON_TV=$(tv "{ [ -e $DIR/$SS_FOLDER/$NAME ] && wc -c < $DIR/$SS_FOLDER/$NAME; } 2>/dev/null || content read --uri $URI/$SS_FOLDER/$NAME 2>/dev/null | wc -c") || stopped "$SS_FOLDER/$NAME"
+  if [ "$(printf '%s' "$ON_TV" | tr -d ' \r\n')" = "$SIZE" ]; then
+    echo "$SS_FOLDER/$NAME is already on the TV"
+    continue
+  fi
+  "$PY" -I b64push.py "$THEME/$SS_FOLDER/$NAME" "$(stage "$SS_FOLDER/$NAME")" || stopped "$SS_FOLDER/$NAME"
+  put_on "$SS_FOLDER/$NAME"
+done
+if [ -n "$SS_FOLDER" ] && [ -f "$THEME/$SS_FOLDER/captions.txt" ]; then
+  "$PY" -I b64push.py "$THEME/$SS_FOLDER/captions.txt" "$(stage "$SS_FOLDER/captions.txt")" || stopped "$SS_FOLDER/captions.txt"
+  put_on "$SS_FOLDER/captions.txt"
+fi
+# --- end screensaver_wallpapers ---
 put_on theme_revision "printf '%s' '$REVISION' > $TMP-theme_revision"
 restart_home "the theme was pushed"
 echo applied

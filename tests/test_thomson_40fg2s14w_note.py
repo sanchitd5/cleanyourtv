@@ -83,12 +83,9 @@ def cvte_bullet():
 
 
 def application_id():
-    """The launcher's package name, what the manifest's `.MainActivity` expands to."""
-    gradle = GRADLE.read_text(encoding="utf-8")
-    match = re.search(r"launcherApplicationId'\)\.getOrElse\('([^']+)'\)", gradle)
-    if match:
-        return match.group(1)
-    return re.search(r"namespace '([^']+)'", gradle).group(1)
+    """The package the note recorded: the upstream build's id. This fork's default id is its own
+    (launcher/app/build.gradle), but the note quotes what ran on the Thomson."""
+    return LAUNCHER
 
 
 def manifest_components(text):

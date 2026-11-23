@@ -19,20 +19,43 @@ final class WallpaperRotation {
     }
 
     static List<File> images(File directory) {
+        return list(directory, false);
+    }
+
+    /**
+     * wallpaper_video: the collection's clips, sorted by name as its pictures are, so a sequential order is the
+     * same after every restart. A clip is as large as its minute of video makes it, so only the count is capped.
+     */
+    private static final String CLIP = ".mp4";
+
+    static List<File> videos(File directory) {
+        return list(directory, true);
+    }
+
+    private static List<File> list(File directory, boolean clips) {
         List<File> result = new ArrayList<>();
         File[] entries = directory == null ? null : directory.listFiles();
         if (entries == null) return result;
         Arrays.sort(entries, Comparator.comparing(File::getName));
         for (File entry : entries) {
             String name = entry.getName().toLowerCase(Locale.ROOT);
-            if (entry.isFile() && entry.length() > 0 && entry.length() <= 10 * 1024 * 1024
-                    && (name.endsWith(".jpg") || name.endsWith(".jpeg")
-                    || name.endsWith(".png") || name.endsWith(".webp"))) {
+            if (entry.isFile() && entry.length() > 0 && (clips ? name.endsWith(CLIP)
+                    : entry.length() <= 10 * 1024 * 1024 && (name.endsWith(".jpg") || name.endsWith(".jpeg")
+                    || name.endsWith(".png") || name.endsWith(".webp")))) {
                 result.add(entry);
                 if (result.size() == 100) break;
             }
         }
         return result;
+    }
+
+    /**
+     * A decoder Android ships in software. wallpaper_video plays on the TV's hardware decoder only: MediaPlayer
+     * falls back to one of these when that decoder is busy or cannot take the clip, and a 1080p picture decoded
+     * on the CPU is what a 2 GB set cannot afford behind its Home screen.
+     */
+    static boolean softwareCodec(String name) {
+        return name != null && (name.startsWith("c2.android.") || name.startsWith("OMX.google."));
     }
 
     static File find(List<File> images, String name) {

@@ -283,6 +283,239 @@ final class Config {
     final boolean singleRow;
     /** With single_row, the band runs behind every app in the row, not only the dock apps (config.xml, dock_band_all). */
     final boolean dockBandAll;
+    /** The quick settings panel as a grid of tiles, each "Label=target" (theme quick_panel); empty keeps its rows. */
+    final List<String> quickPanel;
+    /** The quick settings panel with no key helper: a held Back and the Settings pill on Home, and the system's panel button (theme quick_panel_shortcuts). */
+    final boolean quickPanelShortcuts;
+    /** The clock screensaver's wallpaper drifts slowly and names its picture, like an aerial (theme clock_aerial). */
+    final boolean clockAerial;
+    /** wallpaper_video: the collection's .mp4 clips, looped without sound over Home's picture; empty when off. */
+    final List<File> wallpaperVideos;
+    /** wallpaper_video_rotation_minutes: how long one clip stays before the next; 0 keeps the one. */
+    final int wallpaperVideoMinutes;
+
+    // --- Horizon (HOME-DESIGN.md section 8): theme-only keys, off or neutral until a theme sets them. ---
+    /** A typographic shelf above the dock with two fixed scrims (theme top_shelf). */
+    final boolean topShelf;
+    /** Strength of the shelf's two gradients in percent, 0 to 100 (theme top_shelf_scrim). */
+    final int topShelfScrim;
+    /** dp the focused tile's artwork trails a D-pad move, 0 to 6; 0 is off (theme focus_parallax). */
+    final int focusParallax;
+    /** One band of light crosses a tile as it takes focus (theme focus_sheen). */
+    final boolean focusSheen;
+    /** Every HDMI port with a device gets a tile among the apps (theme input_tiles). */
+    final boolean inputTiles;
+    /** With input_tiles, ports with no device keep a dimmed tile too (theme input_tiles_show_empty). */
+    final boolean inputTilesShowEmpty;
+    /** Device key, family or kind to a logo file in the theme's inputs/ folder (theme input_logos, "key=file"). */
+    final Map<String, String> inputLogos;
+    /** With show_greeting, the greeting shows 8 s once per part of the day (theme greeting_once). */
+    final boolean greetingOnce;
+    /** Seconds without a key before Home goes calm; 0 is off. A choice made on the TV wins (see {@link #HOME_IDLE_CALM_KEY}). */
+    final int homeIdleCalmSeconds;
+    /** Seconds without a key before Home dims; 0 is off. A choice made on the TV wins (see {@link #HOME_IDLE_DIM_KEY}). */
+    final int homeIdleDimSeconds;
+    /** While Home is left alone the chrome glides a few pixels every minute (theme home_idle_shift). */
+    final boolean homeIdleShift;
+    /** Seconds a wallpaper caption stays before fading; 0 keeps it as long as the picture shows (theme wallpaper_caption_seconds). */
+    final int wallpaperCaptionSeconds;
+    /** Seconds between the clock screensaver's moves, 15 to 600 (theme clock_shift_seconds). */
+    final int clockShiftSeconds;
+    /** Minutes into the clock screensaver before it dims; 0 is off. A choice made on the TV wins (see {@link #CLOCK_DIM_AFTER_KEY}). */
+    final int clockDimAfterMinutes;
+    /** Brightness the screensaver dims to, percent, 10 to 100 (theme clock_dim_floor). */
+    final int clockDimFloor;
+    /** Minutes into the clock screensaver before it fades to black; 0 is off ("Off"). A choice made on the TV wins (see {@link #CLOCK_BLANK_AFTER_KEY}). */
+    final int clockBlankAfterMinutes;
+
+    // --- Glass surfaces (HOME-DESIGN.md section 19.10): theme-only keys, off until a theme sets them. ---
+    /** The launcher's own panels are drawn as glass instead of the opaque dark panel (theme glass_surfaces). */
+    final boolean glassSurfaces;
+    /** With glass_surfaces and wallpaper_video, the glass shows the clip's current frame (theme glass_live_backdrop). */
+    final boolean glassLiveBackdrop;
+    /** Panels are solid again; a choice made on the TV wins (see {@link #REDUCE_TRANSPARENCY_KEY}). */
+    final boolean glassReduceTransparency;
+    /** How the dock sets input tiles apart: {@link #INPUT_GROUP_OFF}, {@link #INPUT_GROUP_DIVIDER} or {@link #INPUT_GROUP_SEPARATE} (theme input_group). */
+    final String inputGroup;
+    /** The dock splits its input tiles from its apps: needs input_tiles and dock_row, and is ignored with single_row. */
+    boolean inputGroupActive() {
+        return inputTiles && dockRow && !singleRow && !INPUT_GROUP_OFF.equals(inputGroup);
+    }
+
+    // --- Top bar (HOME-DESIGN.md section 21): one contiguous block (T1). ---
+    /** Top bar layout: {@link #TOP_BAR_MODE_CLASSIC} (today's header), {@link #TOP_BAR_MODE_SPLIT} or {@link #TOP_BAR_MODE_TVOS} (theme top_bar_layout). */
+    final String topBarLayout;
+    /** With the tvos layout, the date shows in the top-left caption slot (theme top_bar_date). */
+    final boolean topBarDate;
+    static final String TOP_BAR_MODE_CLASSIC = "classic", TOP_BAR_MODE_SPLIT = "split", TOP_BAR_MODE_TVOS = "tvos";
+    /** On-TV choices (ints under these keys): layout 0 Classic, 1 Split, 2 Apple TV; date 1 On, 0 Off. Both are in {@link #HORIZON_KEYS}. */
+    static final String TOP_BAR_LAYOUT_KEY = "top_bar_layout", TOP_BAR_DATE_KEY = "top_bar_date";
+    static final int[] TOP_BAR_LAYOUT_CHOICES = {0, 1, 2};
+
+    /** A known top_bar_layout (any case, trimmed), or classic for anything else. */
+    static String topBarLayout(String value) {
+        if (value == null) return TOP_BAR_MODE_CLASSIC;
+        String v = value.trim();
+        if (TOP_BAR_MODE_SPLIT.equalsIgnoreCase(v)) return TOP_BAR_MODE_SPLIT;
+        return TOP_BAR_MODE_TVOS.equalsIgnoreCase(v) ? TOP_BAR_MODE_TVOS : TOP_BAR_MODE_CLASSIC;
+    }
+
+    /** The layout chosen on the TV (0, 1 or 2), or the theme's when none (-1) or anything else is saved. */
+    static String chosenTopBarLayout(int chosen, String theme) {
+        return chosen >= 0 && chosen < TOP_BAR_LAYOUT_CHOICES.length
+                ? new String[]{TOP_BAR_MODE_CLASSIC, TOP_BAR_MODE_SPLIT, TOP_BAR_MODE_TVOS}[chosen] : theme;
+    }
+    // --- end top bar ---
+    // --- Font (theme key font; a choice made on the TV wins, see HOME_FONT_KEY): one contiguous block. ---
+    /** font's two words (theme key and on-TV row). */
+    static final String FONT_OUTFIT = "outfit", FONT_INTER = "inter";
+    /** {@link #FONT_OUTFIT} (default) or {@link #FONT_INTER}. */
+    final String font;
+    /** On-TV "Font" row: 0 Outfit, 1 Inter, absent -1 = the theme decides. In {@link #HORIZON_KEYS}, so "Follow theme" clears it. */
+    static final String HOME_FONT_KEY = "font";
+
+    /** input_group's three words (theme-only). */
+    static final String INPUT_GROUP_OFF = "off", INPUT_GROUP_DIVIDER = "divider", INPUT_GROUP_SEPARATE = "separate";
+    /**
+     * On-TV "Reduce transparency" (On / Off / Follow theme): an int in launcher_settings, 1 on, 0 off, absent -1 = the
+     * theme decides. Like the Horizon choices it survives a theme push; it is in {@link #HORIZON_KEYS}, so "Follow theme" clears it.
+     */
+    static final String REDUCE_TRANSPARENCY_KEY = "glass_reduce_transparency";
+
+    /** A known input_group (any case, trimmed), or off for anything else. */
+    // watermark: a credit line on Home (theme watermark; the on-TV row only hides it).
+    /** The Home credit line, already cleaned; empty is none. The text is only ever the theme's. */
+    final String watermark;
+    static final String WATERMARK_SHOW_KEY = "watermark_show";
+    static final int WATERMARK_MAX = 60;
+    // quick_panel_credit: a credit line at the bottom of the quick panel (theme key; the watermark On/Off row hides it too).
+    /** The quick panel's credit line, already cleaned and already hidden when the watermark row is Off; empty is none. */
+    final String quickPanelCredit;
+
+    /** The credit to show: the cleaned text, or empty when there is none or the Watermark row is Off. */
+    static String visibleCredit(String raw, boolean watermarkShown) {
+        return watermarkShown ? cleanWatermark(raw) : "";
+    }
+
+    /** Trimmed, control characters stripped, at most 60 characters (code points); null is empty. */
+    static String cleanWatermark(String raw) {
+        if (raw == null) return "";
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < raw.length(); ) {
+            int cp = raw.codePointAt(i);
+            i += Character.charCount(cp);
+            if (!Character.isISOControl(cp)) sb.appendCodePoint(cp);
+        }
+        String s = sb.toString().trim();
+        if (s.codePointCount(0, s.length()) > WATERMARK_MAX) s = s.substring(0, s.offsetByCodePoints(0, WATERMARK_MAX)).trim();
+        return s;
+    }
+
+    static String inputGroup(String value) {
+        if (value == null) return INPUT_GROUP_OFF;
+        String v = value.trim();
+        if (INPUT_GROUP_DIVIDER.equalsIgnoreCase(v)) return INPUT_GROUP_DIVIDER;
+        return INPUT_GROUP_SEPARATE.equalsIgnoreCase(v) ? INPUT_GROUP_SEPARATE : INPUT_GROUP_OFF;
+    }
+
+
+    /*
+     * On-TV overrides for Horizon (HOME-DESIGN.md section 16, decisions 1 and 6). They live in the same
+     * launcher_settings preferences as the other Launcher settings rows, but unlike those they are NOT cleared
+     * by a theme push (syncThemeChoices leaves them alone): the owner's choice survives a theme update. Only the
+     * "Follow theme" row removes them, through {@link #clearHorizonChoices}. A settings row writes the key with
+     * putInt and calls changed(); Config.load() then returns the chosen value in the matching field above (for
+     * the dock, in {@link #columns}). Absent means the theme decides; 0 is a real choice, "Off".
+     */
+    /** 5 or 6 dock tiles; the tile size follows from it. Overrides the theme's columns (and the older "columns" choice). */
+    static final String DOCK_TILES_KEY = "dock_tiles";
+    static final String HOME_IDLE_CALM_KEY = "home_idle_calm_seconds";
+    static final String HOME_IDLE_DIM_KEY = "home_idle_dim_seconds";
+    static final String CLOCK_DIM_AFTER_KEY = "clock_dim_after_minutes";
+    static final String CLOCK_BLANK_AFTER_KEY = "clock_blank_after_minutes";
+    /** What the rows offer; any value in 0..max is honoured when read, so a theme-pushed value outside these still works. */
+    static final int[] DOCK_TILE_CHOICES = {5, 6};
+    static final int[] HOME_IDLE_CALM_CHOICES = {0, 10, 20, 30, 60};
+    static final int[] HOME_IDLE_DIM_CHOICES = {0, 60, 90, 120, 300};
+    static final int[] CLOCK_DIM_AFTER_CHOICES = {0, 2, 5, 10, 15};
+    static final int[] CLOCK_BLANK_AFTER_CHOICES = {0, 15, 30, 60, 120};
+    /*
+     * The rest of the Horizon settings, on the same terms: a choice saved under the theme key's own name wins
+     * over the theme, survives a theme push, and is forgotten by that row's "Follow theme". A switch is stored
+     * as 1 (On) or 0 (Off); a number as itself, where 0 is "Off" or "Never". The greeting is one choice
+     * over two theme keys (show_greeting and greeting_once), and the screensaver's pictures one over
+     * screensaver_wallpapers.
+     */
+    static final String TOP_SHELF_KEY = "top_shelf";
+    static final String TOP_SHELF_SCRIM_KEY = "top_shelf_scrim";
+    static final String INPUT_TILES_KEY = "input_tiles";
+    static final String INPUT_TILES_EMPTY_KEY = "input_tiles_show_empty";
+    static final String GREETING_MODE_KEY = "greeting_mode";
+    static final String FOCUS_PARALLAX_KEY = "focus_parallax";
+    static final String FOCUS_SHEEN_KEY = "focus_sheen";
+    static final String WALLPAPER_VIDEO_KEY = "wallpaper_video";
+    static final String VIDEO_MINUTES_KEY = "wallpaper_video_rotation_minutes";
+    static final String CAPTION_SECONDS_KEY = "wallpaper_caption_seconds";
+    static final String HOME_IDLE_SHIFT_KEY = "home_idle_shift";
+    static final String REDUCED_MOTION_KEY = "reduced_motion";
+    static final String SCREENSAVER_PHOTOS_KEY = "screensaver_photos";
+    static final int GREETING_OFF = 0, GREETING_ALWAYS = 1, GREETING_ONCE = 2;
+    static final int[] TOP_SHELF_SCRIM_CHOICES = {60, 80, 100};
+    static final int[] FOCUS_PARALLAX_CHOICES = {0, 2, 4, 6};
+    static final int[] VIDEO_MINUTES_CHOICES = {5, 10, 20, 30, 0};   // 0 = never
+    static final int[] CAPTION_SECONDS_CHOICES = {6, 12, 30, 0};     // 0 = never
+    static final int[] GREETING_CHOICES = {GREETING_OFF, GREETING_ALWAYS, GREETING_ONCE};
+    static final int[] SWITCH_CHOICES = {0, 1};
+    /** Every Horizon key a row can write, so "Follow theme" can forget them all. */
+    static final String[] HORIZON_KEYS = {DOCK_TILES_KEY, HOME_IDLE_CALM_KEY, HOME_IDLE_DIM_KEY, CLOCK_DIM_AFTER_KEY,
+            CLOCK_BLANK_AFTER_KEY, TOP_SHELF_KEY, TOP_SHELF_SCRIM_KEY, INPUT_TILES_KEY, INPUT_TILES_EMPTY_KEY,
+            GREETING_MODE_KEY, FOCUS_PARALLAX_KEY, FOCUS_SHEEN_KEY, WALLPAPER_VIDEO_KEY, VIDEO_MINUTES_KEY,
+            CAPTION_SECONDS_KEY, HOME_IDLE_SHIFT_KEY, REDUCED_MOTION_KEY, SCREENSAVER_PHOTOS_KEY,
+            REDUCE_TRANSPARENCY_KEY, WATERMARK_SHOW_KEY, TOP_BAR_LAYOUT_KEY, TOP_BAR_DATE_KEY, HOME_FONT_KEY};
+
+    /** A switch chosen on the TV: 1 is On, 0 is Off, anything else (absent is -1) leaves the theme's value. */
+    static boolean chosenSwitch(int chosen, boolean theme) {
+        return chosen == 1 ? true : chosen == 0 ? false : theme;
+    }
+
+    /** The greeting as one choice: {show_greeting, greeting_once} for a mode, or the theme's own when none is chosen. */
+    static boolean[] chosenGreeting(int mode, boolean showTheme, boolean onceTheme) {
+        switch (mode) {
+            case GREETING_OFF: return new boolean[]{false, false};
+            case GREETING_ALWAYS: return new boolean[]{true, false};
+            case GREETING_ONCE: return new boolean[]{true, true};
+            default: return new boolean[]{showTheme, onceTheme};
+        }
+    }
+
+    /** The mode a pair of theme values amounts to, for showing what "Follow theme" would give. */
+    static int greetingMode(boolean show, boolean once) {
+        return !show ? GREETING_OFF : once ? GREETING_ONCE : GREETING_ALWAYS;
+    }
+
+    private static final int HOME_IDLE_CALM_MAX = 600, HOME_IDLE_DIM_MAX = 3600,
+            CLOCK_DIM_AFTER_MAX = 240, CLOCK_BLANK_AFTER_MAX = 720;
+
+    /** The dock tile count chosen on the TV (5 or 6), or {@code current} when none (-1) or anything else is saved. */
+    static int chosenDockTiles(int chosen, int current) {
+        return chosen == 5 || chosen == 6 ? chosen : current;
+    }
+
+    /** A timing chosen on the TV, 0 ("Off") to {@code max}, or the theme's when none (-1) or an out-of-range one is saved. */
+    static int chosenTiming(int chosen, int theme, int max) {
+        return chosen >= 0 && chosen <= max ? chosen : theme;
+    }
+
+    /** Forgets every Horizon choice made on the TV, so the theme decides again ("Follow theme"). Does not commit. */
+    static SharedPreferences.Editor clearHorizonChoices(SharedPreferences.Editor editor) {
+        for (String key : HORIZON_KEYS) editor.remove(key);
+        return editor;
+    }
+
+    /** Forgets one Horizon choice (a row's own "Follow theme"). Does not commit. */
+    static SharedPreferences.Editor clearHorizonChoice(SharedPreferences.Editor editor, String key) {
+        return editor.remove(key);
+    }
 
     private Config(List<String> dockApps, boolean fillDock, List<String> hiddenApps, List<String> libraryApps, List<String> libraryExcludedApps, String liveTvPackage,
                    String liveTvAction, String liveTvInputId, Map<String, String> launchActions, Map<String, String> appLabels,
@@ -299,7 +532,13 @@ final class Config {
                    boolean handleViewInputs, boolean tileMenu, boolean dockEvenPadding, boolean dockBand, boolean cinematicDots, boolean cinematicWhiteFocus, boolean wifiStatusColor, int cinematicScrim, int cinematicArt,
                    Map<String, Set<String>> wallpaperMoods, boolean gamepadPassthrough, boolean consumeVolumeKeys, boolean volumePausesFilter, boolean homeIgnoreChannelKeys, boolean powerOnHome, boolean homeLongPressHome, boolean wifiStatusWarnings, List<String> topBarApps, boolean showGreeting, boolean headerWhite, boolean clockWallpaper, int clockWallpaperDim, boolean clockGlow, String glassStyle, boolean singleRow, boolean dockBandAll, boolean lunarDate, int lunarUtcOffset, boolean dateBelowClock, boolean vpnPill, String locale, boolean powerOnHomeAlways, boolean inputsConnectedOnly, boolean inputsCecStateOnly,
                    int openOnStartNetworkWait, boolean openOnStartOnWake, boolean iconOnlyVpn, String clockFormat, boolean backOpensClock, boolean glowSnap,
-                   boolean settingsKeyClearTask) {
+                   boolean settingsKeyClearTask, List<String> quickPanel, boolean quickPanelShortcuts, boolean clockAerial,
+                   List<File> wallpaperVideos, int wallpaperVideoMinutes,
+                   boolean topShelf, int topShelfScrim, int focusParallax, boolean focusSheen, boolean inputTiles, boolean inputTilesShowEmpty,
+                   Map<String, String> inputLogos, boolean greetingOnce, int homeIdleCalmSeconds, int homeIdleDimSeconds, boolean homeIdleShift,
+                   int wallpaperCaptionSeconds, int clockShiftSeconds, int clockDimAfterMinutes, int clockDimFloor, int clockBlankAfterMinutes,
+                   boolean glassSurfaces, boolean glassLiveBackdrop, boolean glassReduceTransparency, String inputGroup, String watermark, String quickPanelCredit,
+                   String topBarLayout, boolean topBarDate, String font) {
         this.handleViewInputs = handleViewInputs;
         this.tileMenu = tileMenu;
         this.inputKeycodes = inputKeycodes;
@@ -416,6 +655,36 @@ final class Config {
         this.clockGlow = clockGlow;
         this.singleRow = singleRow;
         this.dockBandAll = dockBandAll;
+        this.quickPanel = quickPanel;
+        this.quickPanelShortcuts = quickPanelShortcuts;
+        this.clockAerial = clockAerial;
+        this.wallpaperVideos = wallpaperVideos;
+        this.wallpaperVideoMinutes = wallpaperVideoMinutes;
+        this.topShelf = topShelf;
+        this.topShelfScrim = topShelfScrim;
+        this.focusParallax = focusParallax;
+        this.focusSheen = focusSheen;
+        this.inputTiles = inputTiles;
+        this.inputTilesShowEmpty = inputTilesShowEmpty;
+        this.inputLogos = Collections.unmodifiableMap(inputLogos);
+        this.greetingOnce = greetingOnce;
+        this.homeIdleCalmSeconds = homeIdleCalmSeconds;
+        this.homeIdleDimSeconds = homeIdleDimSeconds;
+        this.homeIdleShift = homeIdleShift;
+        this.wallpaperCaptionSeconds = wallpaperCaptionSeconds;
+        this.clockShiftSeconds = clockShiftSeconds;
+        this.clockDimAfterMinutes = clockDimAfterMinutes;
+        this.clockDimFloor = clockDimFloor;
+        this.clockBlankAfterMinutes = clockBlankAfterMinutes;
+        this.glassSurfaces = glassSurfaces;
+        this.glassLiveBackdrop = glassLiveBackdrop;
+        this.glassReduceTransparency = glassReduceTransparency;
+        this.inputGroup = inputGroup(inputGroup);
+        this.watermark = cleanWatermark(watermark);   // watermark
+        this.quickPanelCredit = cleanWatermark(quickPanelCredit);   // quick_panel_credit
+        this.topBarLayout = topBarLayout(topBarLayout);
+        this.topBarDate = topBarDate;
+        this.font = Fonts.font(font);
         this.glowStyle = glowStyle(glowStyle);
         this.wallpaperCaptions = wallpaperCaptions;
         this.glassStyle = glassStyle(glassStyle);
@@ -437,6 +706,24 @@ final class Config {
     /** The folder the theme tools push into; null when external storage is unavailable. */
     static File dir(Context ctx) {
         return ctx.getExternalFilesDir(null);
+    }
+
+    /** wallpaper_feeds without a rotation of the theme's own: a new feed picture every hour. */
+    static final int FEEDS_ROTATION_MINUTES = 60;
+
+    /** The wallpaper-feeds addon's folder when the theme turns wallpaper_feeds on, else null. */
+    static File feedsDir(File dir, JSONObject json) {
+        return dir != null && json != null && bool(json, "wallpaper_feeds", false) ? new File(dir, ThemeFiles.FEEDS) : null;
+    }
+
+    /**
+     * Changes when the addon adds or removes a feed file (the folder's mtime), so Home can rebuild on its next
+     * resume. One stat, no config read: with wallpaper_feeds off nothing writes the folder, so it never changes.
+     */
+    static String feedsStamp(Context ctx) {
+        File dir = dir(ctx);
+        File feeds = dir == null ? null : new File(dir, ThemeFiles.FEEDS);
+        return feeds == null || !feeds.isDirectory() ? "" : String.valueOf(feeds.lastModified());
     }
 
     static Config load(Context ctx) {
@@ -550,6 +837,35 @@ final class Config {
         String glassStyle = res.getString(R.string.glass_style);
         boolean singleRow = res.getBoolean(R.bool.single_row);
         boolean dockBandAll = res.getBoolean(R.bool.dock_band_all);
+        // Theme-only, like wallpaper_dim: no resource behind them, so they are off until a config.json sets them.
+        List<String> quickPanel = Collections.emptyList();
+        boolean quickPanelShortcuts = false;
+        boolean clockAerial = false;
+        boolean topShelf = false;
+        int topShelfScrim = 100;
+        int focusParallax = 0;
+        boolean focusSheen = false;
+        boolean inputTiles = false;
+        boolean inputTilesShowEmpty = false;
+        List<String> inputLogos = Collections.emptyList();
+        boolean greetingOnce = false;
+        int homeIdleCalmSeconds = 0;
+        int homeIdleDimSeconds = 0;
+        boolean homeIdleShift = false;
+        int wallpaperCaptionSeconds = 0;
+        int clockShiftSeconds = 60;
+        int clockDimAfterMinutes = 0;
+        int clockDimFloor = 35;
+        int clockBlankAfterMinutes = 0;
+        boolean glassSurfaces = false;
+        boolean glassLiveBackdrop = false;
+        boolean glassReduceTransparency = false;
+        String inputGroup = INPUT_GROUP_OFF;
+        String watermark = "";   // watermark
+        String quickPanelCredit = "";   // quick_panel_credit
+        String topBarLayout = TOP_BAR_MODE_CLASSIC;
+        boolean topBarDate = true;
+        String font = FONT_OUTFIT;
         boolean applied = false;
 
         File dir = dir(ctx);
@@ -666,6 +982,34 @@ final class Config {
             clockGlow = bool(json, "clock_glow", clockGlow);
             singleRow = bool(json, "single_row", singleRow);
             dockBandAll = bool(json, "dock_band_all", dockBandAll);
+            quickPanel = stringList(json, "quick_panel", quickPanel);
+            quickPanelShortcuts = bool(json, "quick_panel_shortcuts", quickPanelShortcuts);
+            clockAerial = bool(json, "clock_aerial", clockAerial);
+            topShelf = bool(json, "top_shelf", topShelf);
+            topShelfScrim = integer(json, "top_shelf_scrim", topShelfScrim, 0, 100);
+            focusParallax = integer(json, "focus_parallax", focusParallax, 0, 6);
+            focusSheen = bool(json, "focus_sheen", focusSheen);
+            inputTiles = bool(json, "input_tiles", inputTiles);
+            inputTilesShowEmpty = bool(json, "input_tiles_show_empty", inputTilesShowEmpty);
+            inputLogos = stringList(json, "input_logos", inputLogos);
+            greetingOnce = bool(json, "greeting_once", greetingOnce);
+            homeIdleCalmSeconds = integer(json, "home_idle_calm_seconds", homeIdleCalmSeconds, 0, 600);
+            homeIdleDimSeconds = integer(json, "home_idle_dim_seconds", homeIdleDimSeconds, 0, 3600);
+            homeIdleShift = bool(json, "home_idle_shift", homeIdleShift);
+            wallpaperCaptionSeconds = integer(json, "wallpaper_caption_seconds", wallpaperCaptionSeconds, 0, 600);
+            clockShiftSeconds = integer(json, "clock_shift_seconds", clockShiftSeconds, 15, 600);
+            clockDimAfterMinutes = integer(json, "clock_dim_after_minutes", clockDimAfterMinutes, 0, 240);
+            clockDimFloor = integer(json, "clock_dim_floor", clockDimFloor, 10, 100);
+            clockBlankAfterMinutes = integer(json, "clock_blank_after_minutes", clockBlankAfterMinutes, 0, 720);
+            glassSurfaces = bool(json, "glass_surfaces", glassSurfaces);
+            glassLiveBackdrop = bool(json, "glass_live_backdrop", glassLiveBackdrop);
+            glassReduceTransparency = bool(json, "glass_reduce_transparency", glassReduceTransparency);
+            inputGroup = string(json, "input_group", inputGroup);
+            watermark = cleanWatermark(string(json, "watermark", watermark));   // watermark
+            quickPanelCredit = cleanWatermark(string(json, "quick_panel_credit", quickPanelCredit));   // quick_panel_credit
+            topBarLayout = string(json, "top_bar_layout", topBarLayout);
+            topBarDate = bool(json, "top_bar_date", topBarDate);
+            font = string(json, "font", font);
             glowStyle = string(json, "glow_style", glowStyle);
             glassStyle = string(json, "glass_style", glassStyle);
         }
@@ -678,6 +1022,30 @@ final class Config {
         if (mounted) syncThemeChoices(choices, dir, file);
         int chosenColumns = choices.getInt("columns", columns);
         if (chosenColumns >= 4 && chosenColumns <= 7) columns = chosenColumns;
+        // Horizon: the dock's 5 or 6 tiles and the idle timings are chosen on the TV and survive a theme push.
+        columns = chosenDockTiles(choices.getInt(DOCK_TILES_KEY, -1), columns);
+        homeIdleCalmSeconds = chosenTiming(choices.getInt(HOME_IDLE_CALM_KEY, -1), homeIdleCalmSeconds, HOME_IDLE_CALM_MAX);
+        homeIdleDimSeconds = chosenTiming(choices.getInt(HOME_IDLE_DIM_KEY, -1), homeIdleDimSeconds, HOME_IDLE_DIM_MAX);
+        clockDimAfterMinutes = chosenTiming(choices.getInt(CLOCK_DIM_AFTER_KEY, -1), clockDimAfterMinutes, CLOCK_DIM_AFTER_MAX);
+        clockBlankAfterMinutes = chosenTiming(choices.getInt(CLOCK_BLANK_AFTER_KEY, -1), clockBlankAfterMinutes, CLOCK_BLANK_AFTER_MAX);
+        topShelf = chosenSwitch(choices.getInt(TOP_SHELF_KEY, -1), topShelf);
+        topShelfScrim = chosenTiming(choices.getInt(TOP_SHELF_SCRIM_KEY, -1), topShelfScrim, 100);
+        inputTiles = chosenSwitch(choices.getInt(INPUT_TILES_KEY, -1), inputTiles);
+        inputTilesShowEmpty = chosenSwitch(choices.getInt(INPUT_TILES_EMPTY_KEY, -1), inputTilesShowEmpty);
+        boolean[] greeting = chosenGreeting(choices.getInt(GREETING_MODE_KEY, -1), showGreeting, greetingOnce);
+        showGreeting = greeting[0];
+        greetingOnce = greeting[1];
+        focusParallax = chosenTiming(choices.getInt(FOCUS_PARALLAX_KEY, -1), focusParallax, 6);
+        focusSheen = chosenSwitch(choices.getInt(FOCUS_SHEEN_KEY, -1), focusSheen);
+        font = Fonts.chosen(choices.getInt(HOME_FONT_KEY, -1), font);
+        homeIdleShift = chosenSwitch(choices.getInt(HOME_IDLE_SHIFT_KEY, -1), homeIdleShift);
+        wallpaperCaptionSeconds = chosenTiming(choices.getInt(CAPTION_SECONDS_KEY, -1), wallpaperCaptionSeconds, 600);
+        reducedMotion = chosenSwitch(choices.getInt(REDUCED_MOTION_KEY, -1), reducedMotion);
+        glassReduceTransparency = chosenSwitch(choices.getInt(REDUCE_TRANSPARENCY_KEY, -1), glassReduceTransparency);
+        if (!chosenSwitch(choices.getInt(WATERMARK_SHOW_KEY, -1), true)) watermark = "";   // watermark: hidden on the TV
+        quickPanelCredit = visibleCredit(quickPanelCredit, chosenSwitch(choices.getInt(WATERMARK_SHOW_KEY, -1), true));   // quick_panel_credit: same row
+        topBarLayout = chosenTopBarLayout(choices.getInt(TOP_BAR_LAYOUT_KEY, -1), topBarLayout);
+        topBarDate = chosenSwitch(choices.getInt(TOP_BAR_DATE_KEY, -1), topBarDate);
         int chosenRows = choices.getInt(ROWS_BELOW_DOCK_KEY, rowsBelow);
         if (chosenRows >= 0 && chosenRows <= 3) rowsBelow = chosenRows;
         animations = choices.getBoolean("animations", animations);
@@ -701,6 +1069,17 @@ final class Config {
             wallpapers.addAll(WallpaperRotation.images(new File(dir, "wallpapers")));
         }
         if (wallpapers.isEmpty() && wallpaper != null) wallpapers.add(wallpaper);
+        // wallpaper_feeds: the wallpaper-feeds addon's downloads stand in for the theme's collection once there are
+        // any; until then (or with the addon gone) the theme's own pictures stay.
+        File feeds = feedsDir(dir, json);
+        // Its screen opens from Launcher settings, so the add-on takes no tile on Home.
+        if (feeds != null && !hidden.contains(FeedsApp.PACKAGE)) hidden.add(FeedsApp.PACKAGE);
+        List<File> feedImages = feeds != null && wallpaperEnabled ? WallpaperRotation.images(feeds) : Collections.emptyList();
+        if (!feedImages.isEmpty()) {
+            wallpapers.clear();
+            wallpapers.addAll(feedImages);
+            if (rotationMinutes == 0) rotationMinutes = FEEDS_ROTATION_MINUTES;
+        }
         // An on-TV wallpaper pick overrides the theme: a filename from the wallpapers/
         // collection, or "none". Unset means the theme decides (off by default).
         String wallpaperChoice = choices.getString(WALLPAPER_CHOICE_KEY, null);
@@ -712,6 +1091,20 @@ final class Config {
             wallpaper = chosen.isEmpty() ? null : chosen.get(0);
             wallpaperEnabled = !chosen.isEmpty();
         }
+        // wallpaper_video: the theme's clips play over the picture, unless one was picked on the TV (or none).
+        boolean videoOn = chosenSwitch(choices.getInt(WALLPAPER_VIDEO_KEY, -1), json != null && bool(json, "wallpaper_video", false));
+        List<File> videos = chosen == null && wallpaperEnabled && dir != null && videoOn
+                ? WallpaperRotation.videos(new File(dir, "wallpapers")) : Collections.emptyList();
+        // Once the feeds have arrived they own the background: only their aerials play, never the theme's own clips
+        // over the feed pictures (with no aerials yet, the feed pictures show still).
+        if (chosen == null && feeds != null && !feedImages.isEmpty()) {
+            videos = wallpaperEnabled && videoOn ? WallpaperRotation.videos(feeds) : Collections.emptyList();
+        } else if (chosen == null && wallpaperEnabled && videoOn && feeds != null) {
+            List<File> feedClips = WallpaperRotation.videos(feeds);
+            if (!feedClips.isEmpty()) videos = feedClips;
+        }
+        int videoMinutes = chosenTiming(choices.getInt(VIDEO_MINUTES_KEY, -1),
+                json == null ? 0 : integer(json, "wallpaper_video_rotation_minutes", 10, 0, 1440), 1440);
         // A festive skin comes only from a theme; config.xml has no festival. seasonal_skin names one the same way
         // but launchers before it ignore the key, so a theme can carry it without older ones showing the diya skin.
         Festival festival = json == null ? Festival.NONE : Festival.parse(festivalName(json),
@@ -732,7 +1125,12 @@ final class Config {
                 Math.max(0, Math.min(90, clockWallpaperDim)), clockGlow, glassStyle, singleRow && dockRow, dockBandAll, lunar, lunarOffset,
                 dateBelowClock, vpnPill, locale, powerOnHomeAlways, inputsConnectedOnly, inputsCecStateOnly,
                 Math.max(0, Math.min(600, openOnStartNetworkWait)), openOnStartOnWake, iconOnlyVpn, clockFormat, backOpensClock, glowSnap,
-                settingsKeyClearTask);
+                settingsKeyClearTask, quickPanel, quickPanelShortcuts, clockAerial, videos, videoMinutes,
+                topShelf, topShelfScrim, focusParallax, focusSheen, inputTiles, inputTilesShowEmpty, packageMap(inputLogos), greetingOnce,
+                homeIdleCalmSeconds, homeIdleDimSeconds, homeIdleShift, wallpaperCaptionSeconds, clockShiftSeconds,
+                clockDimAfterMinutes, clockDimFloor, clockBlankAfterMinutes,
+                glassSurfaces, glassLiveBackdrop, glassReduceTransparency, inputGroup, watermark, quickPanelCredit,
+                topBarLayout, topBarDate, font);
     }
 
     /**

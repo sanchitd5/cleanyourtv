@@ -10,7 +10,7 @@ android {
         // Opt-in identity for firmware with a package-name HOME allowlist.
         // Xiaomi: docs/devices/xiaomi-mitv-aetp0-dofus.md (com.ts.launcher).
         // ColorOS TV: docs/devices/oppo-k9-55-oppocnm632.md (com.oneplus.tv.launcher2).
-        applicationId providers.gradleProperty('launcherApplicationId').getOrElse('com.gathin.tvhome')
+        applicationId providers.gradleProperty('launcherApplicationId').getOrElse('com.sanchitdang.tvhome')
         minSdk 26
         targetSdk 34
         versionCode 15
@@ -25,6 +25,8 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             // Sideloaded over ADB, never published: sign with the debug key so it installs over a debug build.
             signingConfig signingConfigs.debug
+            // The git commit as META-INF/version-control-info.textproto, for a store's crash reports. About 200 B.
+            vcsInfo.include false
         }
     }
 
@@ -40,6 +42,12 @@ android {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
+}
+
+// AndroidX's baseline profile (assets/dexopt/baseline.prof, about 850 B with its zip entries) is installed by
+// androidx.profileinstaller or by a store. This APK has neither, so nothing ever reads the file.
+tasks.configureEach { task ->
+    if (task.name.contains('ArtProfile')) task.enabled = false
 }
 
 dependencies {

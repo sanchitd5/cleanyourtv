@@ -22,6 +22,29 @@ public class WallpaperSizeTest {
         assertFalse(WallpaperSize.accepted(0, 1080));
     }
 
+    @Test public void aClipOfTheScreensShapeIsNotScaled() {
+        assertArrayEquals(new float[]{1f, 1f}, WallpaperSize.cropScale(1920, 1080, 1920, 1080), 0.0001f);
+        assertArrayEquals(new float[]{1f, 1f}, WallpaperSize.cropScale(1280, 720, 1920, 1080), 0.0001f);
+    }
+
+    @Test public void aWiderClipIsCutAtTheSides() {
+        // 4096x2160 on 1920x1080: the height fills, and the width hangs over by 4096/3840.
+        float[] scale = WallpaperSize.cropScale(4096, 2160, 1920, 1080);
+        assertEquals(4096f / 3840f, scale[0], 0.0001f);
+        assertEquals(1f, scale[1], 0.0001f);
+    }
+
+    @Test public void aTallerClipIsCutTopAndBottom() {
+        float[] scale = WallpaperSize.cropScale(1620, 1080, 1920, 1080);
+        assertEquals(1f, scale[0], 0.0001f);
+        assertEquals((16f / 9f) / 1.5f, scale[1], 0.0001f);
+    }
+
+    @Test public void anUnknownSizeLeavesTheClipAlone() {
+        assertArrayEquals(new float[]{1f, 1f}, WallpaperSize.cropScale(0, 0, 1920, 1080), 0.0001f);
+        assertArrayEquals(new float[]{1f, 1f}, WallpaperSize.cropScale(1920, 1080, 0, 0), 0.0001f);
+    }
+
     @Test public void fourKOn1080pSamplesByTwo() {
         assertEquals(2, WallpaperSize.sampleSize(3840, 2160, 1920, 1080));
         assertNull(WallpaperSize.coverScale(1920, 1080, 1920, 1080));
@@ -48,5 +71,25 @@ public class WallpaperSizeTest {
         org.junit.Assert.assertTrue(WallpaperSize.accepted(4032 / s, 3024 / s));
         int t = WallpaperSize.sampleSize(65535, 2159, 1920, 1080);
         org.junit.Assert.assertFalse(WallpaperSize.accepted(65535 / t, 2159 / t));
+    }
+
+    @Test public void aClipOfTheViewsShapeShowsAllOfItsFrame() {
+        assertArrayEquals(new float[]{0f, 0f, 1f, 1f}, WallpaperSize.sourceRect(WallpaperSize.cropScale(1280, 720, 1920, 1080)), 0.0001f);
+        assertArrayEquals(new float[]{0f, 0f, 1f, 1f}, WallpaperSize.sourceRect(new float[]{1f, 1f}), 0.0001f);
+    }
+
+    @Test public void aWiderClipShowsTheMiddleOfItsWidth() {
+        float[] r = WallpaperSize.sourceRect(WallpaperSize.cropScale(2560, 1080, 1920, 1080));   // 21:9 on 16:9
+        assertArrayEquals(new float[]{0.125f, 0f, 0.875f, 1f}, r, 0.0001f);
+    }
+
+    @Test public void aTallerClipShowsTheMiddleOfItsHeight() {
+        float[] r = WallpaperSize.sourceRect(WallpaperSize.cropScale(1920, 1440, 1920, 1080));   // 4:3
+        assertArrayEquals(new float[]{0f, 0.125f, 1f, 0.875f}, r, 0.0001f);
+    }
+
+    @Test public void anUnknownScaleShowsTheWholeFrame() {
+        assertArrayEquals(new float[]{0f, 0f, 1f, 1f}, WallpaperSize.sourceRect(null), 0.0001f);
+        assertArrayEquals(new float[]{0f, 0f, 1f, 1f}, WallpaperSize.sourceRect(new float[]{0f, -1f}), 0.0001f);
     }
 }

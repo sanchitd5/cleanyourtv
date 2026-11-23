@@ -85,7 +85,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 TOOLS = ROOT / "tools"
-LAUNCHER_PKG = "com.gathin.tvhome"
+LAUNCHER_PKG = "com.sanchitdang.tvhome"
 # The launcher does not always run under its default id: some firmware only lets a package name it allowlists be
 # Home, so launcher/app/build.gradle takes -PlauncherApplicationId and the device notes send people there
 # (docs/devices/xiaomi-mitv-mftr0-debloat-home.md wants com.ts.launcher on a China Xiaomi set, and
@@ -622,6 +622,7 @@ ENUMS = {
     "glass_style": (("glass", "rim", "halo"), "glass", True),
     "clock_format": (("12", "24", "system"), "system", True),
     "wallpaper_order": (("shuffle", "sequential"), "shuffle", False),
+    "font": (("outfit", "inter"), "outfit", True),
 }
 
 
@@ -967,7 +968,7 @@ def tv(command, quiet=False):
 def launcher_package():
     """The package the TV answers HOME with, when it wears this launcher's MainActivity, else the default id.
 
-    `com.gathin.tvhome` stays the answer for a TV that says nothing: it is the build almost every reader has, and a
+    `com.sanchitdang.tvhome` stays the answer for a TV that says nothing: it is the build almost every reader has, and a
     set that cannot answer the query (an Android 8 firmware without `cmd package query-activities`) still gets the
     directory that build writes.
     """

@@ -31,4 +31,27 @@ final class WallpaperSize {
         }
         return height > screenH ? new int[]{height, screenH} : null;
     }
+
+    /**
+     * wallpaper_video: a full-screen VideoView stretches a clip to its own shape, so this is the {x, y} scale about
+     * the centre that puts the clip's shape back and fills the view, cutting what hangs over (a centre crop).
+     * {1, 1} for a clip of the view's shape, or while either size is unknown.
+     */
+    static float[] cropScale(int width, int height, int viewW, int viewH) {
+        if (width <= 0 || height <= 0 || viewW <= 0 || viewH <= 0) return new float[]{1f, 1f};
+        float cover = Math.max((float) viewW / width, (float) viewH / height);
+        return new float[]{width * cover / viewW, height * cover / viewH};
+    }
+
+    /**
+     * Which part of the uncropped clip frame is on screen, as {left, top, right, bottom} fractions of the frame (0 to 1):
+     * the VideoView stretches the frame to the view and {@link #cropScale} then magnifies it about the centre, so the
+     * visible part is the centred 1/scale of each axis. The full frame, {0, 0, 1, 1}, for a clip of the view's shape or an
+     * unknown scale. G2 uses it to turn a screen rectangle into a PixelCopy source rectangle.
+     */
+    static float[] sourceRect(float[] cropScale) {
+        float sx = cropScale != null && cropScale.length >= 2 && cropScale[0] >= 1f ? cropScale[0] : 1f;
+        float sy = cropScale != null && cropScale.length >= 2 && cropScale[1] >= 1f ? cropScale[1] : 1f;
+        return new float[]{0.5f - 0.5f / sx, 0.5f - 0.5f / sy, 0.5f + 0.5f / sx, 0.5f + 0.5f / sy};
+    }
 }

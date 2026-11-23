@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The TV banner: a framed landscape at dusk. Drawn for this add-on, no third-party art. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp" android:height="180dp"
+    android:viewportWidth="320" android:viewportHeight="180">
+    <path android:fillColor="#FF1B2340" android:pathData="M0,0h320v180h-320z" />
+    <path android:fillColor="#FF3A4A7A" android:pathData="M0,0h320v110h-320z" />
+    <path android:fillColor="#FFFFB45A" android:pathData="M220,80m-22,0a22,22 0,1 1,44 0a22,22 0,1 1,-44 0" />
+    <path android:fillColor="#FF26365E" android:pathData="M0,120l70,-50l60,40l50,-30l70,45l70,-30v85h-320z" />
+    <path android:fillColor="#FF141A30" android:pathData="M0,150l90,-30l80,25l70,-20l80,25v30h-320z" />
+</vector>

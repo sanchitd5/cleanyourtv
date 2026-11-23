@@ -2,6 +2,7 @@ package com.gathin.tvhome;
 
 import java.io.File;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
@@ -44,6 +45,14 @@ final class WallpaperMood {
             // not a number: the defaults
         }
         return times != null ? times : new int[]{DEFAULT_SUNRISE, DEFAULT_SUNSET};
+    }
+
+    /** The pictures {@code groups} allows at this hour, or all of them when it names none: Home's and the clock's. */
+    static List<File> playable(List<File> all, Map<String, Set<String>> groups, String latitude, String longitude) {
+        if (groups.isEmpty()) return all;
+        LocalDateTime now = LocalDateTime.now();
+        int[] sun = sun(now.toLocalDate(), latitude, longitude, ZoneId.systemDefault());
+        return select(all, groups, timeOfDay(now.getHour() * 60 + now.getMinute(), sun[0], sun[1]));
     }
 
     /** The pictures in the mood's group, in the collection's order; all of them when the group has none. */

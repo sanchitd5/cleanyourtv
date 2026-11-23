@@ -29,6 +29,31 @@ public class ThemeFilesTest {
         assertFalse(ThemeFiles.collectionImage("captions.txt"));
     }
 
+    @Test public void theCollectionsClipsAreAllowed() {
+        assertEquals("wallpapers/01-aurora.mp4", ThemeFiles.path(Arrays.asList("wallpapers", "01-aurora.mp4")));
+        assertEquals("wallpapers/Night_2.MP4", ThemeFiles.path(Arrays.asList("wallpapers", "Night_2.MP4")));
+        assertNull(ThemeFiles.path(Collections.singletonList("clip.mp4")));
+        assertNull(ThemeFiles.path(Arrays.asList("wallpapers", ".mp4")));
+        assertNull(ThemeFiles.path(Arrays.asList("wallpapers", "a b.mp4")));
+        assertNull(ThemeFiles.path(Arrays.asList("wallpapers", "../clip.mp4")));
+        assertNull(ThemeFiles.path(Arrays.asList("wallpapers", "clip.mp4.sh")));
+        assertNull(ThemeFiles.path(Arrays.asList("wallpapers", "clip.mkv")));
+        assertNull(ThemeFiles.path(Arrays.asList("other", "clip.mp4")));
+    }
+
+    @Test public void aClipIsNotACollectionImage() {
+        // Clearing the collection's pictures must leave the clips where they are.
+        assertFalse(ThemeFiles.collectionImage("01-aurora.mp4"));
+        assertTrue(ThemeFiles.clip("01-aurora.mp4"));
+        assertTrue(ThemeFiles.clip("01-aurora.MP4"));
+        assertFalse(ThemeFiles.clip("01-aurora.jpg"));
+        assertFalse(ThemeFiles.clip(".mp4"));
+        assertFalse(ThemeFiles.clip("mp4"));
+        assertFalse(ThemeFiles.clip("01-aurora.mp4.part"));
+        assertFalse(ThemeFiles.clip("a b.mp4"));
+        assertFalse(ThemeFiles.clip(null));
+    }
+
     @Test public void anythingElseIsRefused() {
         assertNull(ThemeFiles.path(null));
         assertNull(ThemeFiles.path(Collections.emptyList()));
@@ -48,5 +73,35 @@ public class ThemeFilesTest {
         assertTrue(ThemeFiles.isCollection(Collections.singletonList("wallpapers")));
         assertFalse(ThemeFiles.isCollection(Arrays.asList("wallpapers", "dusk.jpg")));
         assertFalse(ThemeFiles.isCollection(Collections.singletonList("config.json")));
+    }
+
+    @Test public void theInputLogosFolderTakesCollectionImagesOnly() {
+        assertEquals("inputs/ps5.png", ThemeFiles.path(Arrays.asList("inputs", "ps5.png")));
+        assertEquals("inputs/Fire_TV-2.webp", ThemeFiles.path(Arrays.asList("inputs", "Fire_TV-2.webp")));
+        assertNull(ThemeFiles.path(Arrays.asList("inputs", "../x")));
+        assertNull(ThemeFiles.path(Arrays.asList("inputs", "..")));
+        assertNull(ThemeFiles.path(Arrays.asList("inputs", "a.mp4")));
+        assertNull(ThemeFiles.path(Arrays.asList("inputs", ".hidden.png")));
+        assertNull(ThemeFiles.path(Arrays.asList("inputs", "a", "ps5.png")));
+        assertNull(ThemeFiles.path(Collections.singletonList("inputs")));
+        assertNull(ThemeFiles.path(Arrays.asList("inputs", "notes.txt")));
+    }
+
+    @Test public void theFeedsFolderTakesStillsClipsAndCaptions() {
+        assertEquals("feeds/bing-20261123.jpg", ThemeFiles.path(Arrays.asList("feeds", "bing-20261123.jpg")));
+        assertEquals("feeds/aerial-a1b2.mp4", ThemeFiles.path(Arrays.asList("feeds", "aerial-a1b2.mp4")));
+        assertEquals("feeds/captions.txt", ThemeFiles.path(Arrays.asList("feeds", "captions.txt")));
+        assertNull(ThemeFiles.path(Collections.singletonList("feeds")));
+        assertNull(ThemeFiles.path(Arrays.asList("feeds", "..")));
+        assertNull(ThemeFiles.path(Arrays.asList("feeds", "../config.json")));
+        assertNull(ThemeFiles.path(Arrays.asList("feeds", "a.mp4.part")));
+        assertNull(ThemeFiles.path(Arrays.asList("feeds", "notes.txt")));
+        // The Wallpaper feeds APK Home offers, under that one name only.
+        assertEquals("feeds/wallfeeds.apk", ThemeFiles.path(Arrays.asList("feeds", "wallfeeds.apk")));
+        assertNull(ThemeFiles.path(Arrays.asList("feeds", "other.apk")));
+        assertNull(ThemeFiles.path(Arrays.asList("wallpapers", "wallfeeds.apk")));
+        assertNull(ThemeFiles.path(Arrays.asList("feeds", "sub", "a.jpg")));
+        // Clearing the theme's collection never touches the feeds.
+        assertFalse(ThemeFiles.isCollection(Collections.singletonList("feeds")));
     }
 }

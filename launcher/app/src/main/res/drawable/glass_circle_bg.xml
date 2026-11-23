@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Quick panel round control: 12 % white disc at rest, the white disc when focused. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true">
+        <shape android:shape="oval">
+            <gradient android:angle="270" android:startColor="#F2FFFFFF" android:endColor="#E0FFFFFF" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="oval">
+            <solid android:color="#1FFFFFFF" />
+        </shape>
+    </item>
+</selector>

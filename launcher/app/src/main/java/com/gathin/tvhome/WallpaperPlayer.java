@@ -5,6 +5,8 @@ import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
+import android.media.MediaPlayer;
+import android.os.PersistableBundle;
 import android.text.TextUtils;
 import android.util.DisplayMetrics;
 import android.util.Log;
@@ -15,11 +17,9 @@ import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.TextView;
+import android.widget.VideoView;
 
 import java.io.File;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -29,8 +29,11 @@ import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-/** Displays and rotates a theme's local wallpaper images while Home is visible. */
-final class WallpaperPlayer {
+/**
+ * Displays and rotates a theme's local wallpaper images while Home is visible, and its clips over them
+ * (wallpaper_video): muted, looped, on the hardware decoder, and only while Home is in front.
+ */
+final class WallpaperPlayer implements MediaPlayer.OnInfoListener, MediaPlayer.OnErrorListener, Runnable {
     private final FrameLayout root;
     private final ImageView image;
     private final int backgroundColor;
@@ -59,10 +62,45 @@ final class WallpaperPlayer {
     private boolean captionAway;
     /** wallpaper_moods: the collection's groups by time of day; empty rotates through all of it. */
     private final Map<String, Set<String>> moods;
-    /** config.xml latitude and longitude for the sun's times, and today's {sunrise, sunset} once worked out. */
+    /** config.xml latitude and longitude, for the sun's times. */
     private final String latitude, longitude;
-    private LocalDate sunDay;
-    private int[] sun;
+    /** wallpaper_video: the collection's clips; empty when off. */
+    private final List<File> videos;
+    private final long videoInterval;
+    /** The clips' layer, under the picture; gone while Home is not on screen and after a clip failed. */
+    private VideoView video;
+    /** A clip is on screen: the caption names it, not the picture that faded away over it. */
+    private boolean videoShown;
+    /**
+     * The clip the view has, to move on from, and since when; 0 when the next play() has to give it another.
+     * Not kept across a restart of Home, which starts the collection again.
+     */
+    private String playing = "";
+    private long since;
+    private static boolean logged;
+    /** glass_surfaces without reduced transparency: a blurred copy of each picture is built for the panels (19.4). */
+    private final boolean glass;
+    /** glass_live_backdrop on top of that: the clip's frame is sampled for the panels. */
+    private final boolean glassLive;
+    /** The clip's {@link WallpaperSize#cropScale}, for the live sample's source rectangle. */
+    private float[] cropScale = {1f, 1f};
+    private boolean sampling;
+    private final Runnable resample = new Runnable() {
+        @Override public void run() {
+            sampling = false;
+            if (!active || closed || !videoShown) return;
+            sampleBackdrop();
+            sampling = true;
+            root.postDelayed(this, GlassSampling.MIN_GAP_MS);
+        }
+    };
+    /** wallpaper_caption_seconds: the caption fades out this long after it appears; 0 keeps it for as long as its picture shows. */
+    private final long captionMs;
+    private final Runnable fadeCaption = new Runnable() {
+        @Override public void run() {
+            if (caption != null) caption.animate().alpha(0f).setDuration(1200).start();
+        }
+    };
 
     WallpaperPlayer(Context context, FrameLayout root, Config config) {
         this.root = root;
@@ -72,6 +110,12 @@ final class WallpaperPlayer {
         bitmapConfig = config.wallpaperTrueColor ? Bitmap.Config.ARGB_8888 : Bitmap.Config.RGB_565;
         // The dim is painted into the picture (decode), so no full-screen shade layer is drawn on every frame.
         dimColor = config.wallpaperDim > 0 ? (config.wallpaperDim * 255 / 100) << 24 : 0;
+        videos = config.wallpaperVideos;
+        glass = config.glassSurfaces && !config.glassReduceTransparency;
+        glassLive = glass && config.glassLiveBackdrop && !config.wallpaperVideos.isEmpty();
+        GlassBackdrop.setLiveEnabled(glassLive);
+        captionMs = config.wallpaperCaptionSeconds * 1000L;
+        videoInterval = config.wallpaperVideoMinutes * 60_000L;
         order = config.wallpaperOrder;
         preferences = context.getSharedPreferences("wallpaper_rotation", Context.MODE_PRIVATE);
         moods = config.wallpaperMoods;
@@ -90,14 +134,26 @@ final class WallpaperPlayer {
         image = new ImageView(context);
         image.setScaleType(ImageView.ScaleType.CENTER_CROP);
         image.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        names = config.wallpaperCaptions && config.wallpaperEnabled && !files.isEmpty()
-                ? WallpaperCaptions.read(files.get(0).getParentFile()) : Collections.emptyMap();
+        List<File> named = files.isEmpty() ? videos : files;
+        names = config.wallpaperCaptions && config.wallpaperEnabled && !named.isEmpty()
+                ? WallpaperCaptions.read(named.get(0).getParentFile()) : Collections.emptyMap();
         caption = names.isEmpty() ? null : makeCaption(context, root);
         if (config.wallpaperEnabled && !files.isEmpty()) {
             root.addView(image, 0, new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
             showFirst();
         }
+        if (videos.isEmpty()) return;
+        // A VideoView is a SurfaceView: the clip is its own layer behind Home's window, so Home is not drawn
+        // again for every frame of it. The picture lies over it and fades away once the clip has a frame.
+        video = new VideoView(context);
+        video.setFocusable(false);
+        // 0 is AudioManager.AUDIOFOCUS_NONE: a silent clip must not stop the music another app is playing.
+        video.setAudioFocusRequest(0);
+        video.setOnInfoListener(this);
+        video.setOnErrorListener(this);
+        root.addView(video, 0, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
     }
 
     /**
@@ -133,15 +189,134 @@ final class WallpaperPlayer {
     void start() {
         active = true;
         update();
+        play();
+        // Back on Home: the current caption shows again for its seconds.
+        if (captionMs > 0) showCaption(false);
     }
 
+    /** The caption view, or null when wallpaper_captions is off or there are no names. */
+    TextView caption() {
+        return caption;
+    }
+
+    /** The docked caption (top_shelf): 13 sp, on the shelf's meta line, at the strength the scrim is made for. */
+    void dockCaption() {
+        if (caption == null) return;
+        caption.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        caption.setTextColor(0xE6FFFFFF);
+    }
+
+    /** Home is paused: the clip stops on its frame, and goes on from there if Home was only covered by a panel. */
     void stop() {
         active = false;
+        stopLiveSampling();
+        if (caption != null && captionMs > 0) {
+            caption.removeCallbacks(fadeCaption);
+            caption.animate().cancel();
+        }
+        if (video != null) video.pause();
+    }
+
+    /**
+     * Home is no longer on screen (onStop): the player and its decoder go, so nothing decodes behind an app, an
+     * HDMI input or the screensaver. Gone, the view has no surface either; play() brings it back, and the view
+     * then opens its clip again, from the start, under the picture.
+     */
+    void release() {
+        stopLiveSampling();
+        GlassBackdrop.clearLive();
+        if (video == null) return;
+        video.suspend();
+        video.setVisibility(View.GONE);
+        image.animate().cancel();
+        image.setAlpha(1f);
+        if (!videoShown) return;
+        videoShown = false;
+        showCaption(true);
+    }
+
+    /**
+     * Starts a clip, or goes on with the paused one, while Home is in front. A clip stays for
+     * wallpaper_video_rotation_minutes of the clock from when it was opened, not of Home being open, so a Home
+     * that is looked at a minute at a time still gets through the collection. After a clip that failed, nothing
+     * is tried until Home next comes forward, and then another one is.
+     */
+    private void play() {
+        if (video == null || !active || closed) return;
+        try {
+            long now = System.currentTimeMillis();
+            // Another clip: the first one, the one after a clip that failed or that update() faded out, or Home is
+            // back after longer than a clip stays.
+            if (since == 0 || !videoShown && WallpaperRotation.due(since, now, videoInterval)) {
+                File clip = WallpaperRotation.pick(videos, playing, order, random);
+                playing = clip.getName();
+                since = now;
+                video.setVideoPath(clip.getPath());
+            }
+            video.setVisibility(View.VISIBLE);
+            video.start();
+        } catch (Exception failure) {
+            fail(failure.toString());
+        }
+    }
+
+    /** No clip: the picture stays and nothing on screen says so; logcat has the first reason only. */
+    private void fail(String why) {
+        if (!logged) Log.w("TvHome.Wallpaper", "video: " + why);
+        logged = true;
+        since = 0;
+        release();
+    }
+
+    /** The picture is back over the clip that is leaving (update): open the next one under it. */
+    @Override
+    public void run() {
+        since = 0;
+        play();
+    }
+
+    /**
+     * 3 is MEDIA_INFO_VIDEO_RENDERING_START: the clip's first frame is on its surface, and its decoder has a name.
+     * The picture is still over the clip here, so this is also early enough to set the clip up - every time,
+     * because the view makes a new player whenever its surface comes back.
+     */
+    @Override
+    public boolean onInfo(MediaPlayer mp, int what, int extra) {
+        if (what != 3) return false;
+        mp.setLooping(true);
+        // Silent whatever the file holds; a clip is meant to have no sound track at all.
+        mp.setVolume(0f, 0f);
+        // VideoView asks for the screen to stay on while a clip plays; Home must never hold it beyond the system timeout.
+        mp.setScreenOnWhilePlaying(false);
+        video.setKeepScreenOn(false);
+        if (videoShown) return false;
+        PersistableBundle stats = mp.getMetrics();
+        String codec = stats == null ? null : stats.getString("android.media.mediaplayer.video.codec");
+        if (WallpaperRotation.softwareCodec(codec)) {
+            fail(codec);
+            return false;
+        }
+        float[] scale = WallpaperSize.cropScale(mp.getVideoWidth(), mp.getVideoHeight(), width, height);
+        video.setScaleX(scale[0]);
+        video.setScaleY(scale[1]);
+        cropScale = scale;
+        videoShown = true;
+        showCaption(true);
+        image.animate().alpha(0f).setDuration(800).start();
+        return false;
+    }
+
+    /** Handled here, so the view shows no "Can't play this video" dialog over Home. */
+    @Override
+    public boolean onError(MediaPlayer mp, int what, int extra) {
+        fail(what + " " + extra);
+        return true;
     }
 
     /** Drops the wallpaper texture when Home is hidden and Android asks the process to free memory. */
     void releaseForMemoryPressure() {
         if (current == null) return;
+        GlassBackdrop.clear();
         image.setImageDrawable(null);
         // The renderer may still have a queued frame that references this hardware bitmap. Drop our references and
         // let Android reclaim its native buffer after rendering releases it instead of recycling it mid-frame.
@@ -150,25 +325,45 @@ final class WallpaperPlayer {
         root.setBackgroundColor(backgroundColor);
     }
 
+    /** One live sample of the clip's frame now (panel opened, Home pausing); a no-op unless glass_live_backdrop and a clip shows. */
+    void sampleBackdrop() {
+        if (glassLive && video != null && videoShown && !closed) GlassBackdrop.requestLive(video, cropScale);
+    }
+
+    /** A Home popup is open over the clip: one sample now, then one a second while the clip plays. Ends with {@link #stopLiveSampling}. */
+    void startLiveSampling() {
+        if (!glassLive || sampling || !active || closed || !videoShown) return;
+        resample.run();
+    }
+
+    void stopLiveSampling() {
+        sampling = false;
+        root.removeCallbacks(resample);
+    }
+
     /** The pictures the rotation picks from now: wallpaper_moods' group for the time of day, or the whole collection. */
     private List<File> playable() {
-        if (moods.isEmpty()) return files;
-        LocalDateTime now = LocalDateTime.now();
-        if (!now.toLocalDate().equals(sunDay)) {
-            sunDay = now.toLocalDate();
-            sun = WallpaperMood.sun(sunDay, latitude, longitude, ZoneId.systemDefault());
-        }
-        return WallpaperMood.select(files, moods, WallpaperMood.timeOfDay(now.getHour() * 60 + now.getMinute(), sun[0], sun[1]));
+        return WallpaperMood.playable(files, moods, latitude, longitude);
     }
 
     void close() {
         active = false;
         closed = true;
+        GlassBackdrop.clear();
+        if (caption != null) caption.removeCallbacks(fadeCaption);
+        release();
         decoder.shutdownNow();
     }
 
     void update() {
-        if (!active || closed || loading || files.isEmpty()) return;
+        if (!active || closed) return;
+        // The next clip: the picture fades back in over this one, and out again once the next has a frame.
+        if (videoShown && videos.size() > 1
+                && WallpaperRotation.due(since, System.currentTimeMillis(), videoInterval)) {
+            videoShown = false;
+            image.animate().alpha(1f).setDuration(800).withEndAction(this).start();
+        }
+        if (loading || files.isEmpty()) return;
         String previous = preferences.getString("image", "");
         // A picture outside the time of day's group (the group changed) is replaced at once, not after the interval.
         List<File> playable = playable();
@@ -210,7 +405,7 @@ final class WallpaperPlayer {
      * below the buttons' row rather than flush against it; the offset is fixed, so a taller top bar (font scale,
      * an extra date line) eats into that gap — and it has to stay clear of the clock block and of the tiles.
      */
-    private static TextView makeCaption(Context context, FrameLayout root) {
+    static TextView makeCaption(Context context, FrameLayout root) {
         float dp = context.getResources().getDisplayMetrics().density;
         TextView text = new TextView(context);
         text.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
@@ -236,10 +431,12 @@ final class WallpaperPlayer {
         params.topMargin = Math.round(137 * dp) - pad;
         params.setMarginEnd(Math.round(62 * dp) - pad);
         // In a holder of its own, so scrolling can fade it (scrolledAway) without fighting the picture-change fade.
+        // The holder fills the screen and the caption keeps its own margins in it, so dockCaption's setY (the
+        // top_shelf docking) still works in screen coordinates.
         FrameLayout holder = new FrameLayout(context);
-        holder.addView(text, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT));
-        root.addView(holder, params);
+        holder.addView(text, params);
+        root.addView(holder, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT));
         return text;
     }
 
@@ -258,7 +455,13 @@ final class WallpaperPlayer {
     /** The displayed picture's name, faded across a change; a picture without a name hides the caption. */
     private void showCaption(boolean fade) {
         if (caption == null) return;
-        String name = names.get(displayed);
+        caption.removeCallbacks(fadeCaption);
+        showCaptionNow(fade);
+        if (captionMs > 0 && caption.getContentDescription() != null) caption.postDelayed(fadeCaption, captionMs + (fade ? 600 : 0));
+    }
+
+    private void showCaptionNow(boolean fade) {
+        String name = names.get(videoShown ? playing : displayed);
         caption.animate().cancel();
         if (name == null) {
             caption.setAlpha(0f);
@@ -293,32 +496,60 @@ final class WallpaperPlayer {
         if (old != null && old != bitmap) image.postDelayed(old::recycle, 500);
     }
 
-    private Bitmap decode(File file) {
+    /**
+     * A picture sampled and scaled down to cover the screen, never bigger than 4K; null when it cannot be read.
+     * Home's and the clock screensaver's.
+     */
+    static Bitmap decode(File file, int screenW, int screenH, Bitmap.Config config, boolean mutable) {
         try {
             BitmapFactory.Options options = new BitmapFactory.Options();
             options.inJustDecodeBounds = true;
             BitmapFactory.decodeFile(file.getPath(), options);
             int width = options.outWidth, height = options.outHeight;
             if (width <= 0 || height <= 0) return null;
-            int sample = WallpaperSize.sampleSize(width, height, this.width, this.height);
+            int sample = WallpaperSize.sampleSize(width, height, screenW, screenH);
             if (!WallpaperSize.accepted(width / sample, height / sample)) return null;
             options.inJustDecodeBounds = false;
             options.inSampleSize = sample;
-            int[] scale = WallpaperSize.coverScale(width / sample, height / sample, this.width, this.height);
+            int[] scale = WallpaperSize.coverScale(width / sample, height / sample, screenW, screenH);
             if (scale != null) {
                 options.inScaled = true;
                 options.inDensity = scale[0];
                 options.inTargetDensity = scale[1];
             }
-            options.inPreferredConfig = bitmapConfig;
+            options.inPreferredConfig = config;
             // Into sRGB once, here. A photo with an Adobe RGB or Display P3 profile otherwise keeps that colour space
             // and the GPU converts the full-screen picture on every frame: ~90% late frames on a MiTV-MOOQ1 (Mali,
-            // Android 10) against 0% for the same picture without the profile.
+            // Android 10) against 0% for the same picture without the profile. (Upstream; now in the shared decode,
+            // so ClockScene's stills get it too.)
             options.inPreferredColorSpace = android.graphics.ColorSpace.get(android.graphics.ColorSpace.Named.SRGB);
-            options.inMutable = dimColor != 0;
-            Bitmap decoded = BitmapFactory.decodeFile(file.getPath(), options);
-            if (decoded == null) return null;
+            options.inMutable = mutable;
+            return BitmapFactory.decodeFile(file.getPath(), options);
+        } catch (Exception | OutOfMemoryError failure) {
+            return null;
+        }
+    }
+
+    /** The first filtered step runs here (the picture is software only here); the blur and the publish go to the wallpaper thread. */
+    private void buildBackdrop(Bitmap picture) {
+        Bitmap mid = GlassStill.reduce(picture, width, height);
+        if (mid == null || closed) return;
+        try {
+            decoder.execute(() -> {
+                Bitmap blurred = GlassStill.soften(mid);
+                if (blurred != null && !closed) GlassBackdrop.publishStill(blurred);
+            });
+        } catch (RuntimeException rejected) {
+            mid.recycle();   // closed meanwhile
+        }
+    }
+
+    private Bitmap decode(File file) {
+        Bitmap decoded = decode(file, width, height, bitmapConfig, dimColor != 0);
+        if (decoded == null) return null;
+        try {
             if (dimColor != 0) new Canvas(decoded).drawColor(dimColor);
+            if (glass) buildBackdrop(decoded);
             // One copy in GPU memory instead of a software bitmap plus its texture; the decode stays off the UI
             // thread for rotations, and Home's return no longer uploads 4-8 MB to the GPU.
             Bitmap gpu = decoded.copy(Bitmap.Config.HARDWARE, false);

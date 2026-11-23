@@ -18,7 +18,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 SPEC = importlib.util.spec_from_file_location("flamechart_window", ROOT / "tools/flamechart.py")
 chart = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(chart)
-PKG = "com.gathin.tvhome"
+PKG = "com.sanchitdang.tvhome"
 MS = 1_000_000
 
 
@@ -33,8 +33,8 @@ class WholeProcessWindowTest(unittest.TestCase):
             create table thread_track (id integer, utid integer);
             create table slice (ts integer, dur integer, track_id integer, id integer,
                                 depth integer, name text, parent_id integer);
-            insert into process values (1, 100, 'com.gathin.tvhome');
-            insert into thread values (1, 1, 100, 'com.gathin.tvhome'), (2, 1, 101, 'RenderThread');
+            insert into process values (1, 100, 'com.sanchitdang.tvhome');
+            insert into thread values (1, 1, 100, 'com.sanchitdang.tvhome'), (2, 1, 101, 'RenderThread');
             insert into thread_track values (10, 1), (20, 2);
             insert into slice (ts,dur,track_id) values (1000000000, 10000000, 10), (1020000000, 5000000, 20);
         """)

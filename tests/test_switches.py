@@ -57,6 +57,17 @@ SCREENSHOT_WANTED = {
     "wifi_status_color",
 }
 
+# Horizon fork keys (not upstreamed): no docs/switches.md rows on purpose.
+SCREENSHOT_WANTED |= {
+    "watermark", "wallpaper_video", "wallpaper_video_rotation_minutes", "wallpaper_caption_seconds",
+    "top_shelf", "top_shelf_scrim", "top_bar_layout", "top_bar_date", "screensaver_wallpapers",
+    "quick_panel", "quick_panel_shortcuts", "quick_panel_credit", "input_tiles", "input_tiles_show_empty",
+    "input_logos", "input_group", "home_idle_shift", "home_idle_dim_seconds", "home_idle_calm_seconds",
+    "greeting_once", "glass_surfaces", "glass_reduce_transparency", "glass_live_backdrop", "font",
+    "focus_sheen", "focus_parallax", "clock_shift_seconds", "clock_dim_floor", "clock_dim_after_minutes",
+    "clock_blank_after_minutes", "clock_aerial", "wallpaper_feeds",
+}
+
 
 def theme_keys():
     """Every key in the Keys table of themes/README.md, as the site reads it."""

@@ -9,6 +9,9 @@ PY=$TOOLS/venv/bin/python
 # No venv yet: say how to make one (as tools/disable.sh does) instead of failing on the Windows path (#1142).
 [ -x "$PY" ] || { echo "run: python3 -m venv tools/venv && tools/venv/bin/pip install -r tools/requirements.txt" >&2; exit 1; }
 export MSYS_NO_PATHCONV=1
+# The launcher's application id (build.gradle default; a -PlauncherApplicationId build passes it here). The Java
+# classes keep the com.gathin.tvhome namespace, so components are written with the full class name.
+PKG="${LAUNCHER_PACKAGE:-com.sanchitdang.tvhome}"
 # Below minSdk, `pm install` refuses the APK with INSTALL_FAILED_OLDER_SDK - and only after gradle has
 # spent a minute building and b64push has pushed the APK to the TV (#576). Ask the TV first. The
 # number comes from the build file, so it follows the launcher instead of a hard-coded copy here.
@@ -80,7 +83,7 @@ if [ -z "${STOCK_LAUNCHER:-}" ]; then
   case " $KNOWN_STOCK_LAUNCHERS " in
     *" $HOME_PKG "*) STOCK_LAUNCHER=$HOME_PKG ;;
     *)
-      if [ "$HOME_PKG" = com.gathin.tvhome ]; then
+      if [ "$HOME_PKG" = "$PKG" ]; then
         STOCK_LAUNCHER=none; echo "Home already belongs to this launcher; nothing will be disabled."
       elif [ "$HOME_PKG" = android ]; then
         # Android's chooser: two or more launchers tie and no default is set, which is where a TV lands
@@ -140,7 +143,7 @@ esac
 # HDMI picture on screen (#1101). `am start` below would only reuse it, so stop it first; the start
 # then creates a fresh one. A force stop also takes the key helpers off the enabled list, so a helper
 # that was on is written back (cleared first: Android binds again only when the list changes).
-"$PY" -I ../tools/tv.py 's=$(settings get secure enabled_accessibility_services); a=$(settings get secure accessibility_enabled); am force-stop com.gathin.tvhome; case "$s" in *com.gathin.tvhome*) settings put secure enabled_accessibility_services ""; settings put secure enabled_accessibility_services "$s"; settings put secure accessibility_enabled "$a" ;; esac' >/dev/null
+"$PY" -I ../tools/tv.py 's=$(settings get secure enabled_accessibility_services); a=$(settings get secure accessibility_enabled); am force-stop '"$PKG"'; case "$s" in *'"$PKG"'*) settings put secure enabled_accessibility_services ""; settings put secure enabled_accessibility_services "$s"; settings put secure accessibility_enabled "$a" ;; esac' >/dev/null
 # Start the launcher on its own, before the stock Home is touched. In the batch below a start that
 # fails only prints an "Error:" line, and the stock launcher would be disabled anyway, leaving the TV
 # with no usable Home (#239). "Status: ok" from `am start -W` means the activity really came up;
@@ -149,9 +152,9 @@ esac
 # make this launcher the home process until a restart, and Android then blocks the stock launcher's
 # remote-button launches (BAL_BLOCK, #1274). The component alone still proves the activity comes up.
 if [ "$STOCK_LAUNCHER" = none ]; then
-  START_CMD='am start -W -n com.gathin.tvhome/.MainActivity'
+  START_CMD="am start -W -n $PKG/com.gathin.tvhome.MainActivity"
 else
-  START_CMD='am start -W -a android.intent.action.MAIN -c android.intent.category.HOME -n com.gathin.tvhome/.MainActivity'
+  START_CMD="am start -W -a android.intent.action.MAIN -c android.intent.category.HOME -n $PKG/com.gathin.tvhome.MainActivity"
 fi
 START_OUT=$("$PY" -I ../tools/tv.py "$START_CMD")
 echo "$START_OUT"
@@ -162,8 +165,8 @@ if ! printf '%s' "$START_OUT" | grep -qF 'Status: ok' || printf '%s' "$START_OUT
   exit 1
 fi
 printf '%s\n' \
-  "pm grant com.gathin.tvhome android.permission.ACCESS_FINE_LOCATION 2>/dev/null; echo location-granted" \
-  "cmd package compile -m speed -f com.gathin.tvhome" \
+  "pm grant $PKG android.permission.ACCESS_FINE_LOCATION 2>/dev/null; echo location-granted" \
+  "cmd package compile -m speed -f $PKG" \
   "$DISABLE_STOCK" \
   | "$PY" -I ../tools/tv.py --batch
 
@@ -171,7 +174,7 @@ printf '%s\n' \
 # is installed, so the chooser check below cannot tell a successful switch from a failed one on its
 # own (#4068). `cmd package set-home-activity` prints "Success" when the preference took; anything
 # else (a SecurityException, "Failure", an empty answer from a dropped link) means it did not.
-SET_HOME_OUT=$("$PY" -I ../tools/tv.py 'cmd package set-home-activity --user 0 com.gathin.tvhome/.MainActivity' 2>/dev/null || true)
+SET_HOME_OUT=$("$PY" -I ../tools/tv.py "cmd package set-home-activity --user 0 $PKG/com.gathin.tvhome.MainActivity" 2>/dev/null || true)
 case "$SET_HOME_OUT" in
   *Success*) SET_HOME_OK=yes ;;
   *) SET_HOME_OK=no ;;
@@ -228,13 +231,13 @@ HOME_NOW=$(query_home)
 if [ "$HOME_NOW" = android ] && [ "$SET_HOME_OK" = yes ]; then
   CLAIMANTS=$("$PY" -I ../tools/tv.py 'cmd package query-activities --brief -a android.intent.action.MAIN -c android.intent.category.HOME' \
     | tr -d '\r' | grep -o '[A-Za-z0-9_.]*/' | tr -d / | sort -u)
-  if printf '%s\n' "$CLAIMANTS" | grep -qx com.gathin.tvhome; then
-    HOME_NOW=com.gathin.tvhome/chooser
-    echo "Home is Android's chooser; set-home-activity reported Success and com.gathin.tvhome is a registered HOME candidate (a second launcher also claims Home), so the handover is kept."
+  if printf '%s\n' "$CLAIMANTS" | grep -qx $PKG; then
+    HOME_NOW=$PKG/chooser
+    echo "Home is Android's chooser; set-home-activity reported Success and $PKG is a registered HOME candidate (a second launcher also claims Home), so the handover is kept."
   fi
 fi
 case "$HOME_NOW" in
-  com.gathin.tvhome/*) echo "Home now resolves to $HOME_NOW" ;;
+  $PKG/*) echo "Home now resolves to $HOME_NOW" ;;
   *)
     if [ -n "$HOME_NOW" ] && [ "$KEEP_STOCK_HOME" = 1 ]; then
       echo "Home stays $HOME_NOW, as STOCK_LAUNCHER=none disabled nothing (stock_home_redirect)."
@@ -273,8 +276,8 @@ esac
 # already listed was refused while the APK was replaced, and binds again only once the list changes, so clear it,
 # switch accessibility off and write it back (as tools/theme.sh does).
 enable_service() {   # appends to enabled_accessibility_services without dropping other services
-  svc=com.gathin.tvhome/.$1
-  "$PY" -I ../tools/tv.py "cmd appops set com.gathin.tvhome AUTO_START allow 2>/dev/null; cmd appops set com.gathin.tvhome APP_AUTO_START allow 2>/dev/null; appops write-settings 2>/dev/null; s=\$(settings get secure enabled_accessibility_services); case \"\$s\" in *$1*) settings put secure enabled_accessibility_services ''; settings put secure accessibility_enabled 0; sleep 1; settings put secure enabled_accessibility_services \"\$s\" ;; null|'') settings put secure enabled_accessibility_services $svc ;; *) settings put secure enabled_accessibility_services \"\$s:$svc\" ;; esac; settings put secure accessibility_enabled 1; echo $1 enabled"
+  svc=$PKG/com.gathin.tvhome.$1
+  "$PY" -I ../tools/tv.py "cmd appops set $PKG AUTO_START allow 2>/dev/null; cmd appops set $PKG APP_AUTO_START allow 2>/dev/null; appops write-settings 2>/dev/null; s=\$(settings get secure enabled_accessibility_services); case \"\$s\" in *$svc*) settings put secure enabled_accessibility_services ''; settings put secure accessibility_enabled 0; sleep 1; settings put secure enabled_accessibility_services \"\$s\" ;; null|'') settings put secure enabled_accessibility_services $svc ;; *) settings put secure enabled_accessibility_services \"\$s:$svc\" ;; esac; settings put secure accessibility_enabled 1; echo $1 enabled"
 }
 if [ "${INPUT_KEY_SERVICE:-0}" = 1 ]; then enable_service InputKeyService; fi
 if [ "${HOME_KEY_SERVICE:-0}" = 1 ]; then enable_service HomeKeyService; fi
@@ -287,12 +290,12 @@ if [ "${HOME_KEY_SERVICE:-0}" = 1 ]; then enable_service HomeKeyService; fi
 # not list the permission at all, fails, or ran out of time (it says DUMP TIMEOUT and still exits 0, cut off
 # before the granted line) prints nothing.
 SECURE=android.permission.WRITE_SECURE_SETTINGS
-READ="s=\$(dumpsys package com.gathin.tvhome) && case \"\$s\" in *\"DUMP TIMEOUT\"*) ;; *\"$SECURE: granted=true\"*)"
+READ="s=\$(dumpsys package $PKG) && case \"\$s\" in *\"DUMP TIMEOUT\"*) ;; *\"$SECURE: granted=true\"*)"
 if [ "${RESTORE_KEY_SERVICES:-0}" = 1 ]; then
-  STEP="pm grant com.gathin.tvhome $SECURE && $READ echo restore-granted ;; esac"; MARK=restore-granted
+  STEP="pm grant $PKG $SECURE && $READ echo restore-granted ;; esac"; MARK=restore-granted
   HINT="the launcher does not hold it, so restore_key_services cannot put the helpers back"
 else
-  STEP="pm revoke com.gathin.tvhome $SECURE; $READ ;; *\"$SECURE\"*) echo secure-settings-revoked ;; esac"
+  STEP="pm revoke $PKG $SECURE; $READ ;; *\"$SECURE\"*) echo secure-settings-revoked ;; esac"
   MARK=secure-settings-revoked
   HINT="the launcher may still hold it; run again with RESTORE_KEY_SERVICES=1 to keep it on purpose"
 fi
@@ -306,7 +309,7 @@ while IFS= read -r line; do
 done <<< "$OUT"
 if [ "$ACK_FOUND" != 1 ]; then
   echo "ERROR: WRITE_SECURE_SETTINGS is not in the state this install asked for ($MARK missing): $HINT." >&2
-  echo "The launcher is installed and is Home. Check by hand: tools/tv.py 'dumpsys package com.gathin.tvhome' | grep $SECURE" >&2
+  echo "The launcher is installed and is Home. Check by hand: tools/tv.py 'dumpsys package $PKG' | grep $SECURE" >&2
   exit 1
 fi
 echo "Installed. Press Home on the remote to see it."

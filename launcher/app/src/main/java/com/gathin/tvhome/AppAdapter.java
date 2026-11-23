@@ -16,6 +16,7 @@ import android.graphics.PixelFormat;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
+import android.media.tv.TvInputManager;
 import android.net.Uri;
 import android.provider.Settings;
 import android.util.DisplayMetrics;
@@ -24,8 +25,6 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
-import android.view.animation.DecelerateInterpolator;
-import android.view.animation.OvershootInterpolator;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.TextView;
@@ -66,7 +65,7 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     }
 
     static final class Entry {
-        static final int APP = 0, HOME_SETTINGS = 1, CARD = 2, EMPTY = 3;
+        static final int APP = 0, HOME_SETTINGS = 1, CARD = 2, EMPTY = 3, INPUT = 4;
 
         final int kind;
         final String label;
@@ -80,6 +79,13 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         int ambient;
         /** uniform_tiles card fill, top and bottom colour; null until sampled from the icon. */
         int[] backdrop;
+        /** INPUT only: the TV input a press opens, the INPUT_STATE_* now, the device kind and the shelf's meta line. */
+        String inputId, inputKind, meta, metaPort;
+        int inputState = -1;
+        /** INPUT only: glyph and wordmark alpha, 1 connected, 0.70 standby or unknown, 0.45 a kept empty port. */
+        float inputAlpha = 1f;
+        /** INPUT only: the port has no CEC device. */
+        boolean inputEmpty;
 
         Entry(String label, ComponentName component, Drawable banner, Drawable icon) {
             this(APP, label, component, banner, icon, null, 0);
@@ -190,6 +196,8 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     private final float restNameAlpha;
     /** cinematic_home: only then does a launch record the last-opened app the shelf uses. */
     private final boolean cinematic;
+    /** top_shelf also shows the last-opened line. */
+    private final boolean topShelf;
     /** Dock order (config.xml dock_apps, or a theme's config.json). */
     private final List<String> favourites;
     /** Grid apps fill the dock slots dock_apps leaves free (config.xml, fill_dock). */
@@ -210,6 +218,9 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     private final boolean reducedMotion;
     /** The focus zoom may overshoot (config.xml, focus_overshoot). */
     private final boolean focusOvershoot;
+    /** Horizon focus effects (themes focus_parallax and focus_sheen), see FocusEffects. */
+    private final int focusParallax;
+    private final boolean focusSheen;
     /** Package to the action its tile sends instead of the start screen (config.xml, launch_actions). */
     private final Map<String, String> launchActions;
     /** Hold OK opens the activity's tile menu (config.xml, tile_menu); false opens App info, as before. */
@@ -221,6 +232,10 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     /** Packages drawn from their icon and name even when they have a banner (config.xml icon_tiles). */
     private final Set<String> iconTiles;
     private final List<Entry> items = new ArrayList<>();
+    // h-group (input_group, 19.15): input tiles lead the dock; inputCount is how many, 0 when the mode is off.
+    private final boolean inputGroup;
+    private int inputCount;
+    private int lastTileWidth;
 
     AppAdapter(Context ctx, TileListener listener, int dockSize, Config cfg) {
         this.ctx = ctx;
@@ -236,18 +251,22 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         this.showLibrary = LibraryApps.showPill(cfg.appLibrary, cfg.libraryButton, cfg.showLibraryPill);
         this.reducedMotion = cfg.reducedMotion;
         this.focusOvershoot = cfg.focusOvershoot;
+        this.focusParallax = cfg.focusParallax;
+        this.focusSheen = cfg.focusSheen;
         this.rowsBelowDock = cfg.rowsBelowDock;
         this.dockTitle = cfg.dockTitle;
         this.dockRow = cfg.dockRow;
         this.singleRow = cfg.singleRow;
         this.restNameAlpha = cfg.alwaysShowNames ? 0.75f : 0f;
         this.cinematic = cfg.cinematicHome;
+        this.topShelf = cfg.topShelf;
         this.launchActions = cfg.launchActions;
         this.iconTiles = new HashSet<>(Arrays.asList(ctx.getResources().getStringArray(R.array.icon_tiles)));
         this.tileMenu = cfg.tileMenu;
         this.appLabels = cfg.appLabels;
         this.appBanners = cfg.appBanners;
         this.uniformTiles = cfg.uniformTiles;
+        this.inputGroup = cfg.inputGroupActive();
         // Tiles keep their identity across reload(), so a focused tile stays on its app instead of
         // its view being rebound to whatever app now sits in that slot.
         setHasStableIds(true);
@@ -258,6 +277,10 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
      * so focus follows it); hidden_apps wins over a card, and a card's package in dock_apps takes that slot.
      */
     void reload(List<Cards.Card> cards, List<ResolveInfo> leanback) {
+        reload(cards, leanback, Collections.emptyList());
+    }
+
+    void reload(List<Cards.Card> cards, List<ResolveInfo> leanback, List<InputTiles.Tile> inputs) {
         PackageManager pm = ctx.getPackageManager();
         // The LEANBACK query is shared with the module-card check (MainActivity); copy it before adding
         // library apps so the caller's list stays as it was.
@@ -311,21 +334,17 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
                 fresh.add(new Entry(label, component, banner, icon));
             }
         }
-        Collections.sort(fresh, (a, b) -> {
-            // The owner's own order first; tiles it does not know (new installs) follow by the rule below.
-            int saved = Order.compare(savedRanks, a.component.flattenToShortString(), b.component.flattenToShortString());
-            if (saved != 0) return saved;
-            int fa = favourites.indexOf(a.pkg), fb = favourites.indexOf(b.pkg);
-            if (fa >= 0 || fb >= 0) {
-                if (fa < 0) return 1;
-                if (fb < 0) return -1;
-                return Integer.compare(fa, fb);
-            }
-            // Cards come right after the configured dock apps, before the alphabetical grid.
-            boolean ca = a.kind == Entry.CARD, cb = b.kind == Entry.CARD;
-            if (ca != cb) return ca ? -1 : 1;
-            return a.label.compareToIgnoreCase(b.label);
-        });
+        for (InputTiles.Tile tile : inputs) {
+            if (tile.visible) fresh.add(inputEntry(tile));
+        }
+        if (inputGroup) {
+            // Group the first few inputs; the rest stay in the Inputs menu (owner default 7).
+            List<Entry> ins = new ArrayList<>();
+            for (Entry e : fresh) if (e.kind == Entry.INPUT) ins.add(e);
+            Collections.sort(ins, this::compareEntries);
+            for (int i = groupLimit(ins.size(), dockSize); i < ins.size(); i++) fresh.remove(ins.get(i));
+        }
+        Collections.sort(fresh, this::compareEntries);
         // Retain the optional Default-home tile until dependent tile-ordering work is merged.
         if (showHomeSettings
                 && pm.resolveActivity(new Intent(Settings.ACTION_HOME_SETTINGS), 0) != null) {
@@ -333,6 +352,9 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
                     new ComponentName(ctx, HomeSettingsActivity.class), null,
                     ctx.getDrawable(R.drawable.ic_home_settings), null, 0));
         }
+        int grouped = 0;
+        if (inputGroup) for (Entry e : fresh) if (e.kind == Entry.INPUT) grouped++;
+        inputCount = grouped;
         docked = 0;
         while (docked < fresh.size() && isDocked(fresh.get(docked))) docked++;
         emptySlots = dockRow && !reordering ? DockSlots.empty(docked, dockSize, fresh.size(), fillDock) : 0;
@@ -343,6 +365,109 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         items.clear();
         items.addAll(fresh);
         notifyDataSetChanged();
+    }
+
+    /** The dock's order: inputs first when grouped, then the owner's saved order, dock_apps, cards and inputs, then by name. */
+    private int compareEntries(Entry a, Entry b) {
+        int group = inputFirst(inputGroup, a.kind == Entry.INPUT, b.kind == Entry.INPUT);
+        if (group != 0) return group;
+        // The owner's own order first; tiles it does not know (new installs) follow by the rule below.
+        int saved = Order.compare(savedRanks, a.component.flattenToShortString(), b.component.flattenToShortString());
+        if (saved != 0) return saved;
+        int fa = favourites.indexOf(a.pkg), fb = favourites.indexOf(b.pkg);
+        if (fa >= 0 || fb >= 0) {
+            if (fa < 0) return 1;
+            if (fb < 0) return -1;
+            return Integer.compare(fa, fb);
+        }
+        // Cards come right after the configured dock apps, before the alphabetical grid.
+        boolean ca = a.kind == Entry.CARD || a.kind == Entry.INPUT, cb = b.kind == Entry.CARD || b.kind == Entry.INPUT;
+        if (ca != cb) return ca ? -1 : 1;
+        return a.label.compareToIgnoreCase(b.label);
+    }
+
+    /** input_group: an input before an app when {@code active}, else no opinion (0). */
+    static int inputFirst(boolean active, boolean aIsInput, boolean bIsInput) {
+        return active ? GridNavigation.groupOrder(aIsInput, bIsInput) : 0;
+    }
+
+    /** input_group: how many of {@code visible} inputs join the group: at most 3, and the dock keeps two app places. */
+    static int groupLimit(int visible, int dockSize) {
+        return Math.max(0, Math.min(visible, Math.min(3, dockSize - 2)));
+    }
+
+    /** Input tiles at the head of the dock, 0 when input_group is off or nothing is connected. */
+    int inputCount() {
+        return inputCount;
+    }
+
+    /** The tile width the grid laid out (px), for DockDecoration's gutter; 0 before the first tile exists. */
+    int tileWidthPx() {
+        return lastTileWidth;
+    }
+
+    /**
+     * An HDMI input as a tile. Its component is the input key with a fixed class, so pkg is "input:<port id>": that is
+     * what dock_apps names and what Order saves. Never hand pkg of an INPUT entry to PackageManager.
+     */
+    private Entry inputEntry(InputTiles.Tile t) {
+        String kind = t.device != null ? t.device.kind : InputDevices.HDMI;
+        Drawable banner = t.logoFile == null ? null : InputTileSource.logoBanner(ctx, t.logoFile, kind);
+        Drawable icon = banner != null ? null : ctx.getDrawable(glyph(kind));
+        Entry e = new Entry(Entry.INPUT, t.name, new ComponentName(InputTiles.key(t.portId), "tile"), banner, icon,
+                null, InputTiles.kindAccent(kind));
+        e.inputId = t.launchId;
+        e.inputKind = kind;
+        e.inputEmpty = t.launchId.equals(t.portId);
+        e.metaPort = t.portName;
+        applyInputState(e, t.state);
+        return e;
+    }
+
+    private void applyInputState(Entry e, int state) {
+        e.inputState = state;
+        boolean connected = state == TvInputManager.INPUT_STATE_CONNECTED;
+        e.inputAlpha = connected ? 1f : e.inputEmpty ? 0.45f : 0.70f;
+        String text = connected ? ctx.getString(R.string.connected)
+                : state == TvInputManager.INPUT_STATE_DISCONNECTED ? ctx.getString(R.string.not_connected)
+                : state == TvInputManager.INPUT_STATE_CONNECTED_STANDBY ? ctx.getString(R.string.standby) : null;
+        e.meta = InputTiles.meta(e.metaPort, text);
+    }
+
+    private static int glyph(String kind) {
+        if (InputDevices.CONSOLE.equals(kind)) return R.drawable.ic_input_console;
+        if (InputDevices.STREAMER.equals(kind)) return R.drawable.ic_input_streamer;
+        if (InputDevices.STB.equals(kind)) return R.drawable.ic_input_stb;
+        if (InputDevices.PC.equals(kind)) return R.drawable.ic_input_pc;
+        return R.drawable.ic_input;
+    }
+
+    /** A new connection state for one input tile (by port id): rebinds that tile only. True when the tile is shown. */
+    boolean updateInputState(String portId, int state) {
+        int pos = positionOf(new ComponentName(InputTiles.key(portId), "tile").flattenToShortString());
+        if (pos < 0 || items.get(pos).kind != Entry.INPUT) return false;
+        Entry e = items.get(pos);
+        if (e.inputState != state) {
+            applyInputState(e, state);
+            notifyItemChanged(pos);
+        }
+        return true;
+    }
+
+    boolean isInputAt(int position) {
+        return position >= 0 && position < items.size() && items.get(position).kind == Entry.INPUT;
+    }
+
+    /** The shelf's meta line for an input tile ("HDMI 1 · Connected"), else null. */
+    String metaAt(int position) {
+        return isInputAt(position) ? items.get(position).meta : null;
+    }
+
+    /** The state word at the end of metaAt's line, for colouring; null when the line is the port alone. */
+    String metaStateAt(int position) {
+        if (!isInputAt(position)) return null;
+        Entry e = items.get(position);
+        return e.meta != null && e.meta.length() > e.metaPort.length() ? e.meta.substring(e.metaPort.length() + 3) : null;
     }
 
     /** icon_tiles: the app's icon centred on a dark banner-shaped tile, for apps whose own banner crops badly. */
@@ -416,6 +541,7 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         int width = parent.getWidth() > 0 ? parent.getWidth() : parent.getMeasuredWidth();
         int inner = width - parent.getPaddingLeft() - parent.getPaddingRight();
         int w = tileWidthPx(inner, parent.getHeight(), dockSize, rowsBelowDock, dockTitle, dockRow, density), h = tileHeightPx(w);
+        lastTileWidth = w;
         View card = v.findViewById(R.id.card);
         ViewGroup.LayoutParams cardLp = card.getLayoutParams();
         cardLp.width = w;
@@ -452,7 +578,8 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
             View label = v.findViewById(R.id.label);
             label.setPadding(label.getPaddingLeft(), label.getPaddingTop(), label.getPaddingRight(), Math.round(4f * density));
         }
-        return new Holder(v, listener, animations, advancedEffects, reducedMotion, restNameAlpha, focusOvershoot);
+        FocusEffects fx = FocusEffects.create(v, animations, reducedMotion, focusParallax, focusSheen, advancedEffects, w, h, density);
+        return new Holder(v, listener, animations, advancedEffects, reducedMotion, restNameAlpha, focusOvershoot, fx);
     }
 
     @Override
@@ -488,10 +615,20 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         h.card.setTranslationZ(focused && advancedEffects ? 8f * ctx.getResources().getDisplayMetrics().density : 0f);
         h.banner.setScaleX(focused && advancedEffects ? 1.035f : 1f);
         h.banner.setScaleY(focused && advancedEffects ? 1.035f : 1f);
+        if (h.fx != null) h.fx.onBind(focused);   // no stray offset, sheen or zoom on a recycled holder
         // A fully opaque banner covers the whole card (centerCrop), so the card's own fill under it is drawn for
         // nothing on every frame; keep it under banners with transparent parts and under icon tiles.
         h.card.setBackground(e.banner != null && e.banner.getOpacity() == PixelFormat.OPAQUE ? null : h.cardBackground);
-        if (uniformTiles && e.banner == null) {
+        // Holders are recycled: whatever an input tile set is put back for every other kind.
+        boolean input = e.kind == Entry.INPUT;
+        h.dot.setVisibility(input && e.inputState == TvInputManager.INPUT_STATE_CONNECTED ? View.VISIBLE : View.GONE);
+        h.icon.setAlpha(input ? e.inputAlpha : 1f);
+        h.label.setAlpha(input ? e.inputAlpha : 1f);
+        if (input && e.banner == null) {
+            h.card.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                    InputTiles.kindBackdrop(e.inputKind)));
+        }
+        if (uniformTiles && e.banner == null && !input) {
             if (e.backdrop == null) e.backdrop = backdrop(e.icon, ambientColorAt(position));
             h.card.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, e.backdrop));
         }
@@ -507,10 +644,11 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
             h.icon.setImageDrawable(e.icon);
             h.icon.setVisibility(View.VISIBLE);
             h.label.setText(e.label);
-            h.label.setVisibility(uniformTiles ? View.GONE : View.VISIBLE);
+            h.label.setVisibility(uniformTiles && !input ? View.GONE : View.VISIBLE);
         }
         h.card.setOnClickListener(v -> launch(e));
         h.card.setOnLongClickListener(v -> {
+            if (input && !tileMenu) return true;   // no App info page for a port
             if (tileMenu) {
                 int pos = h.getBindingAdapterPosition();
                 if (pos != RecyclerView.NO_POSITION) listener.onTileLongPress(pos, v);
@@ -529,6 +667,11 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     /** Opens the tile's activity by explicit component, with no extras: a card can name nothing else. */
     @SuppressWarnings("deprecation")
     private void launch(Entry e) {
+        if (e.kind == Entry.INPUT) {
+            listener.onOpenInput(e.inputId);
+            if (cinematic) LastOpened.record(ctx, e.pkg);
+            return;
+        }
         if (e.kind == Entry.HOME_SETTINGS) {
             ctx.startActivity(new Intent(ctx, HomeSettingsActivity.class)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
@@ -554,7 +697,7 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         }
         try {
             ctx.startActivity(i);
-            if (cinematic) LastOpened.record(ctx, e.pkg);
+            if (cinematic || topShelf) LastOpened.record(ctx, e.pkg);
             if (advancedEffects && !reducedMotion && ctx instanceof Activity) {
                 ((Activity) ctx).overridePendingTransition(R.anim.app_open_enter, R.anim.app_open_exit);
             }
@@ -595,6 +738,7 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
      * the owner moved into the dock stays there (#499); else a dock_apps entry.
      */
     private boolean isDocked(Entry e) {
+        if (inputGroup && e.kind == Entry.INPUT) return true;   // grouped inputs always count as docked
         if (savedDocked < 0) return favourites.contains(e.pkg);
         Integer rank = savedRanks.get(e.component.flattenToShortString());
         return rank != null && rank < savedDocked;
@@ -628,6 +772,7 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     /** Moves one tile; the others shift by one. Stable ids keep the moved tile's view (and its focus). */
     void move(int from, int to) {
         if (from == to || from < 0 || to < 0 || from >= movableCount() || to >= movableCount()) return;
+        if (!GridNavigation.sameGroup(from, to, inputCount)) return;   // input_group: no crossing the boundary
         items.add(to, items.remove(from));
         notifyItemMoved(from, to);
         // The dock row hides names by position: rebind the tiles whose side of the dock edge changed.
@@ -907,6 +1052,7 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         final ImageView banner;
         final ImageView icon;
         final TextView label;
+        final View dot;
         final TextView name;
         final boolean animations;
         final boolean advancedEffects;
@@ -914,23 +1060,27 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         /** Alpha of the name while the tile is not focused (always_show_names). */
         final float restNameAlpha;
         final boolean overshoot;
+        /** Parallax and sheen, null when the theme asks for neither (or animations are off). */
+        final FocusEffects fx;
         /** A dock tile: it grows in place without advanced_effects' lift, which reads as off-centre in the band (#2135). */
         boolean inDock;
 
         Holder(View v, TileListener listener, boolean animations, boolean advancedEffects,
-               boolean reducedMotion, float restNameAlpha, boolean overshoot) {
+               boolean reducedMotion, float restNameAlpha, boolean overshoot, FocusEffects fx) {
             super(v);
             card = v.findViewById(R.id.card);
             cardBackground = card.getBackground();
             banner = v.findViewById(R.id.banner);
             icon = v.findViewById(R.id.icon);
             label = v.findViewById(R.id.label);
+            dot = v.findViewById(R.id.dot);
             name = v.findViewById(R.id.name);
             this.animations = animations;
             this.advancedEffects = advancedEffects;
             this.reducedMotion = reducedMotion;
             this.restNameAlpha = restNameAlpha;
             this.overshoot = overshoot;
+            this.fx = fx;
 
             final float density = v.getResources().getDisplayMetrics().density;
             card.setOutlineProvider(new ViewOutlineProvider() {
@@ -946,6 +1096,7 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
                 if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
                 if (keyCode != KeyEvent.KEYCODE_DPAD_UP && keyCode != KeyEvent.KEYCODE_DPAD_DOWN
                         && keyCode != KeyEvent.KEYCODE_DPAD_LEFT && keyCode != KeyEvent.KEYCODE_DPAD_RIGHT) return false;
+                FocusEffects.noteKey(keyCode);
                 int pos = getBindingAdapterPosition();
                 return listener != null && pos != RecyclerView.NO_POSITION && listener.onTileVerticalKey(pos, keyCode);
             });
@@ -972,7 +1123,7 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
                             .translationY(focused && advancedEffects && !inDock ? -4f * density : 0f)
                             .translationZ(focused && advancedEffects ? 8f * density : 0f)
                             .setDuration(focused ? Motion.REDUCED_MS : 60)
-                            .setInterpolator(new DecelerateInterpolator())
+                            .setInterpolator(FocusMotion.DECELERATE)
                             .start();
                     name.setAlpha(focused ? 1f : restNameAlpha);
                     // Same place as the full motion's slide ends: the layout's -6dp is only its starting point, and
@@ -984,10 +1135,13 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
                             .translationY(focused && advancedEffects && !inDock ? -4f * density : 0f)
                             .translationZ(focused && advancedEffects ? 8f * density : 0f)
                             .setDuration(advancedEffects ? (focused ? 220 : 170) : (focused ? 260 : 180))
-                            .setInterpolator(focused && !overshoot ? new DecelerateInterpolator(1.5f)
-                                    : new OvershootInterpolator(focused ? (advancedEffects ? 0.7f : 1.6f) : 0f))
+                            .setInterpolator(focused && !overshoot ? FocusMotion.EASE_OUT
+                                    : !focused ? FocusMotion.OVERSHOOT_NONE
+                                    : advancedEffects ? FocusMotion.OVERSHOOT_ADVANCED : FocusMotion.OVERSHOOT_PLAIN)
                             .withLayer().start();
-                    if (advancedEffects) {
+                    if (fx != null) {
+                        fx.onFocus(focused, banner.getVisibility() == View.VISIBLE);
+                    } else if (advancedEffects) {
                         banner.animate().scaleX(focused ? 1.035f : 1f).scaleY(focused ? 1.035f : 1f)
                                 .setDuration(280).start();
                     }

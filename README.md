@@ -283,7 +283,7 @@ set is in [Troubleshooting](docs/TROUBLESHOOTING.md).
 |---|---|
 | **Configure** | Dock order, hidden apps, Live TV app, 4 to 7 tiles per row, reduced motion. All in [`config.xml`](launcher/app/src/main/res/values/config.xml) |
 | **Settings on the TV** | Hold OK on Settings for launcher settings. Optional `launcher_settings_button` makes a normal click open them directly; TV settings remain on the settings page and their app tile. |
-| **Themes** | Background, wallpaper and layout from a `config.json` pushed over Wi-Fi, no rebuild. Thirty-three ship in [`themes/`](themes/), the built-in `default/` included |
+| **Themes** | Background, wallpaper and layout from a `config.json` pushed over Wi-Fi, no rebuild. Thirty-four ship in [`themes/`](themes/), the built-in `default/` included |
 | **31 languages** | Follows the TV's language, with a fully mirrored right-to-left layout for Hebrew |
 | **App library** | Optional: browse every installed app and add or remove Home shortcuts. See [the app library guide](docs/app-library.md) |
 | **Tile menu** | On by default (`tile_menu`): hold OK on a tile for Move and App info, plus Remove from Home when the app library is on. Off, holding OK opens App info |
@@ -584,4 +584,9 @@ The people whose work is in this repo:
 ## Licence
 
 MIT, see [`LICENSE`](LICENSE). The Outfit typeface is under the SIL Open Font License, see
-`launcher/FONT-LICENSE-OFL.txt`.
+`launcher/FONT-LICENSE-OFL.txt`. So is Inter (theme key `font: "inter"`), see
+`launcher/FONT-LICENSE-INTER-OFL.txt`. Inter is Inter 4.1, downloaded from
+https://github.com/rsms/inter/releases/download/v4.1/Inter-4.1.zip (SHA-256
+`9883fdd4a49d4fb66bd8177ba6625ef9a64aa45899767dde3d36aa425756b11e`), then cut with fontTools to the Latin,
+Latin-1, Latin Extended-A, punctuation and arrow glyphs the launcher draws, in three static weights
+(Light 300, Regular 400, Medium 500; features tnum, kern, liga, calt, ss01, case).

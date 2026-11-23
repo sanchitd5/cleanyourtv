@@ -62,4 +62,10 @@ public class LaunchActionsTest {
         assertNull(LaunchActions.inputId("input:"));
         assertNull(LaunchActions.inputId("input:   "));
     }
+
+    @Test public void inputKeyRoundTripsThroughInputId() {
+        String id = "com.mediatek.tis/.HdmiInputService/HW2";
+        assertEquals("input:" + id, LaunchActions.inputKey(id));
+        assertEquals(id, LaunchActions.inputId(LaunchActions.inputKey(id)));
+    }
 }
