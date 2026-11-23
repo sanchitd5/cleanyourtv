@@ -58,7 +58,7 @@ unchanged to the TV; its running time cannot be inferred, so keep its waits in s
   `bench.py` bring an existing instance to the front across runs, rather than stacking new Settings
   activities. They do not clear the other app's data or force-stop it. Check that it is responsive
   after a long session; an already accumulated history is not removed by this flag.
-- **The package:** `--package` names the launcher, `com.gathin.tvhome` unless your build has another one
+- **The package:** `--package` names the launcher, `com.sanchitdang.tvhome` unless your build has another one
   (a fork: [SHOWCASE.md](../SHOWCASE.md) lists several). It decides which process the recording follows and
   which one the report reads, so a fork has to pass it to `trace.py`, `trace_report.py` and
   `flamechart.py` alike: with the wrong name the report prints `–` for every step instead of saying the

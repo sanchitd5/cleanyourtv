@@ -26,7 +26,7 @@
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- wallpaper_feeds: lets the Wallpaper feeds app, signed with this app's key, write into feeds/ only. -->
     <permission
-        android:name="com.gathin.tvhome.permission.WRITE_FEEDS"
+        android:name="${applicationId}.permission.WRITE_FEEDS"
         android:protectionLevel="signature" />
 
     <!-- Android 11+ package visibility: lets the launcher list the TV apps it shows as tiles, and the
@@ -245,8 +245,8 @@
             android:permission="android.permission.WRITE_SECURE_SETTINGS">
             <path-permission
                 android:pathPrefix="/feeds/"
-                android:readPermission="com.gathin.tvhome.permission.WRITE_FEEDS"
-                android:writePermission="com.gathin.tvhome.permission.WRITE_FEEDS" />
+                android:readPermission="${applicationId}.permission.WRITE_FEEDS"
+                android:writePermission="${applicationId}.permission.WRITE_FEEDS" />
         </provider>
 
         <!-- wallpaper_feeds: the system installer's answers for the Wallpaper feeds install. -->

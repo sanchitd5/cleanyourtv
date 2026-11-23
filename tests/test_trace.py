@@ -144,7 +144,7 @@ class ArgumentTest(unittest.TestCase):
 
     def test_defaults(self):
         args = trace.parse(["nav"])
-        self.assertEqual((args.runs, args.out, args.package), (5, "traces", "com.gathin.tvhome"))
+        self.assertEqual((args.runs, args.out, args.package), (5, "traces", "com.sanchitdang.tvhome"))
 
     def test_a_file_where_the_traces_go_is_refused_before_connecting(self):
         # os.makedirs() threw FileExistsError from main() after the TV had answered the Home query, so a
@@ -734,7 +734,7 @@ class RecordPreservationTest(unittest.TestCase):
             self.assertTrue(device.closed)
             sidecar = path.with_suffix(".json")
             info = json.loads(sidecar.read_text())
-            self.assertEqual((info["scenario"], info["run"], info["package"]), ("home", 1, "com.gathin.tvhome"))
+            self.assertEqual((info["scenario"], info["run"], info["package"]), ("home", 1, "com.sanchitdang.tvhome"))
             self.assertEqual(info["steps"], ["input keyevent KEYCODE_HOME", "sleep 4"])
             self.assertEqual(output.getvalue(), f"{path}: 5 bytes\nnext: tools/venv/bin/python -I "
                              f"tools/trace_report.py {path.parent}   (see tools/trace.md)\n")

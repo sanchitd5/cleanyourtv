@@ -49,7 +49,7 @@ final class Fetcher {
     static final String KEY_AERIALS = "aerials", KEY_BING = "bing", KEY_WIKIMEDIA = "wikimedia";
     static final String KEY_STATUS = "status", KEY_LAST_RUN = "last_run";
 
-    private static final String AUTHORITY = "com.gathin.tvhome.theme";
+    private static final String AUTHORITY = "com.sanchitdang.tvhome.theme";
     private static final String FOLDER = "feeds";
     private static final String CAPTIONS = "captions.txt";
     private static final String AERIAL_MANIFEST = "https://sylvan.apple.com/Aerials/resources-16.tar";
@@ -96,7 +96,7 @@ final class Fetcher {
 
     private String refresh() throws Exception {
         if (ctx.getPackageManager().resolveContentProvider(AUTHORITY, 0) == null) {
-            return "The launcher (com.gathin.tvhome) is not installed.";
+            return "The launcher (com.sanchitdang.tvhome) is not installed.";
         }
         reconcile();
         boolean aerials = prefs.getBoolean(KEY_AERIALS, true);

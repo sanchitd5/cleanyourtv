@@ -19,8 +19,8 @@ PY="$TOOLS/venv/bin/python"
 [ -x "$PY" ] || PY="$TOOLS/venv/Scripts/python.exe"
 [ -x "$PY" ] || { echo "run: python3 -m venv tools/venv && tools/venv/bin/pip install -r tools/requirements.txt" >&2; exit 1; }
 export MSYS_NO_PATHCONV=1
-PKG=com.gathin.wallfeeds
-FEEDS=content://com.gathin.tvhome.theme/feeds
+PKG=com.sanchitdang.wallfeeds
+FEEDS=content://com.sanchitdang.tvhome.theme/feeds
 TMP=/data/local/tmp/wallfeeds.apk
 tv() { "$PY" -I "$TOOLS/tv.py" "$@"; }
 
@@ -35,7 +35,7 @@ if [ "${1:-}" = --uninstall ]; then
   exit 0
 fi
 
-tv "pm list packages com.gathin.tvhome" | grep -q "package:com.gathin.tvhome$" \
+tv "pm list packages com.sanchitdang.tvhome" | grep -q "package:com.sanchitdang.tvhome$" \
   || { echo "install the launcher first (launcher/build-and-install.sh)" >&2; exit 1; }
 (cd "$HERE" && ./gradlew assembleRelease -q) || { echo "build failed (JDK 17 and Android SDK 34 needed; see launcher/README)" >&2; exit 1; }
 "$PY" -I "$TOOLS/b64push.py" "$HERE/app/build/outputs/apk/release/app-release.apk" "$TMP" >/dev/null
@@ -46,12 +46,12 @@ if [ "${1:-}" = --adb ]; then
   tv "pm install -r $TMP; rm -f $TMP"
   tv "$autostart" >/dev/null
   # Its first screen schedules the refreshes and starts the first one.
-  tv "am start -n $PKG/.StatusActivity" >/dev/null
+  tv "am start -n $PKG/com.gathin.wallfeeds.StatusActivity" >/dev/null
   echo "Installed; the first refresh is running (Wallpaper feeds on the TV shows it)."
 else
   tv "content write --uri $FEEDS/wallfeeds.apk < $TMP; rm -f $TMP"
   # Home may need the launcher's leave to hand an APK to the installer; the TV asks for it otherwise.
-  tv "appops set com.gathin.tvhome REQUEST_INSTALL_PACKAGES allow 2>/dev/null; true" >/dev/null
+  tv "appops set com.sanchitdang.tvhome REQUEST_INSTALL_PACKAGES allow 2>/dev/null; true" >/dev/null
   tv "input keyevent KEYCODE_HOME" >/dev/null
   echo "Staged. Home now asks \"Install Wallpaper feeds?\": choose Install, then confirm on the TV's screen."
 fi

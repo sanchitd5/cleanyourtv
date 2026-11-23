@@ -21,7 +21,7 @@ import java.io.OutputStream;
  * which shows its own confirmation. Nothing is installed without the person pressing Install there too.
  */
 final class FeedsApp {
-    static final String PACKAGE = "com.gathin.wallfeeds";
+    static final String PACKAGE = "com.sanchitdang.wallfeeds";
     static final String APK = "wallfeeds.apk";
     private static final String TAG = "FeedsApp";
     private static final String PREFS = "feeds_app";
