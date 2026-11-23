@@ -10,6 +10,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 
 /**
@@ -45,13 +46,71 @@ final class Feeds {
     static final class Item {
         final String name, url, caption;
         final boolean clip;
+        /** An aerial's category key (see {@link #CATEGORIES}), "" for pictures and uncategorised clips. */
+        final String category;
 
-        Item(String name, String url, String caption, boolean clip) {
+        Item(String name, String url, String caption, boolean clip, String category) {
             this.name = name;
             this.url = url;
             this.caption = caption;
             this.clip = clip;
+            this.category = category;
         }
+    }
+
+    // ---- options ----
+
+    /** Aerial categories: key, label, and the first eight characters of Apple's category id in entries.json. */
+    static final String[][] CATEGORIES = {
+        {"space", "Space", "55B7C95D"},
+        {"landscapes", "Landscapes", "A33A55D9"},
+        {"cities", "Cities", "5EF41171"},
+        {"underwater", "Underwater", "8BE8B524"},
+    };
+    /** Clips to keep: 0 is Auto (what the storage budget allows). Pictures to keep. Refresh hours: 0 is manual. */
+    static final int[] KEEP_CLIPS = {0, 4, 8, 16, 30};
+    static final int[] KEEP_STILLS = {8, 15, 30};
+    static final int[] REFRESH_HOURS = {6, 12, 24, 0};
+    static final String PREF_AUTO = "auto", PREF_1080 = "1080", PREF_4K = "4k";
+
+    /** The category key of an aerial's {@code categories} ids, or "" when it has none of the four. */
+    static String categoryOf(JSONArray ids) {
+        if (ids == null) return "";
+        for (int i = 0; i < ids.length(); i++) {
+            String id = ids.optString(i, "").toUpperCase(java.util.Locale.ROOT);
+            for (String[] c : CATEGORIES) if (id.startsWith(c[2])) return c[0];
+        }
+        return "";
+    }
+
+    /** Whether a clip of {@code category} may be fetched or kept; one in none of the four needs them all on. */
+    static boolean categoryOn(String category, Set<String> enabled) {
+        return category.isEmpty() ? enabled.size() >= CATEGORIES.length : enabled.contains(category);
+    }
+
+    /** The offered clips whose category is enabled; pictures pass. */
+    static List<Item> inCategories(List<Item> items, Set<String> enabled) {
+        List<Item> out = new ArrayList<>();
+        for (Item i : items) if (!i.clip || categoryOn(i.category, enabled)) out.add(i);
+        return out;
+    }
+
+    /** The clips to keep: the chosen number, or what the budget allows when Auto (0), never above the budget. */
+    static int clipTarget(long budget, long clipBytes, int keep) {
+        int fit = clipTarget(budget, clipBytes);
+        return keep > 0 ? Math.min(fit, keep) : fit;
+    }
+
+    /** The pictures to keep: one of {@link #KEEP_STILLS}, else the cap. */
+    static int stillKeep(int pref) {
+        for (int k : KEEP_STILLS) if (k == pref) return k;
+        return MAX_STILLS;
+    }
+
+    /** The refresh period in ms, 0 for manual only; anything unknown is twelve hours. */
+    static long periodMs(int hours) {
+        for (int h : REFRESH_HOURS) if (h == hours) return h * 60L * 60 * 1000;
+        return 12L * 60 * 60 * 1000;
     }
 
     // ---- storage ----
@@ -102,6 +161,16 @@ final class Feeds {
         return hevc1080 ? Q_1080_HEVC : Q_1080_H264;
     }
 
+    /**
+     * The chosen quality: "4k" only where a 4K HEVC decoder exists (the panel and memory checks are the person's
+     * call then), "1080" HEVC or H.264, anything else the automatic choice.
+     */
+    static String quality(String pref, boolean hevc4k, boolean hevc1080, int displayWidth, long ramBytes, long budget) {
+        if (PREF_4K.equals(pref) && hevc4k) return Q_4K;
+        if (PREF_1080.equals(pref)) return hevc1080 ? Q_1080_HEVC : Q_1080_H264;
+        return quality(hevc4k, hevc1080, displayWidth, ramBytes, budget);
+    }
+
     /** The quality and the ones below it, for an asset that lacks the preferred file. */
     static String[] fallbacks(String quality) {
         switch (quality) {
@@ -128,7 +197,7 @@ final class Feeds {
             String place = open > 0 ? copyright.substring(0, open) : copyright;
             String credit = open > 0 && copyright.endsWith(")")
                     ? copyright.substring(open + 2, copyright.length() - 1) : "";
-            out.add(new Item("bing-" + day + ".jpg", "https://www.bing.com" + url, caption(place, credit), false));
+            out.add(new Item("bing-" + day + ".jpg", "https://www.bing.com" + url, caption(place, credit), false, ""));
         }
         return out;
     }
@@ -157,7 +226,7 @@ final class Feeds {
         String who = artist == null ? "" : artist.optString("text").replaceAll("\\s+", " ").trim();
         String lic = license == null ? "" : license.optString("type").trim();
         String credit = who.isEmpty() ? lic : lic.isEmpty() ? who : who + ", " + lic;
-        return new Item("wm-" + day.replaceAll("[^0-9]", "") + ".jpg", sized, caption(title, credit), false);
+        return new Item("wm-" + day.replaceAll("[^0-9]", "") + ".jpg", sized, caption(title, credit), false, "");
     }
 
     /** Apple's aerial manifest (entries.json): every clip, at the first quality in {@code order} it has. */
@@ -175,7 +244,8 @@ final class Feeds {
             String id = a.optString("shotID", a.optString("id", "")).replaceAll(SAFE, "");
             if (url == null || id.isEmpty()) continue;
             // A QuickTime .mov is the MPEG-4 family Android's extractor reads; the launcher takes .mp4 names.
-            out.add(new Item("aerial-" + id + ".mp4", url, caption(a.optString("accessibilityLabel").trim(), ""), true));
+            out.add(new Item("aerial-" + id + ".mp4", url, caption(a.optString("accessibilityLabel").trim(), ""), true,
+                    categoryOf(a.optJSONArray("categories"))));
         }
         return out;
     }

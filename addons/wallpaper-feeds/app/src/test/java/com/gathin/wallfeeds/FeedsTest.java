@@ -6,8 +6,10 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static com.gathin.wallfeeds.Feeds.GB;
 import static com.gathin.wallfeeds.Feeds.MB;
@@ -67,6 +69,33 @@ public class FeedsTest {
         assertArrayEquals(new String[] {Feeds.Q_1080_H264}, Feeds.fallbacks(Feeds.Q_1080_H264));
     }
 
+    @Test public void aChosenQualityIsHonouredWhereTheTvCanPlayIt() {
+        assertEquals(Feeds.Q_4K, Feeds.quality("4k", true, true, 1920, GB, 0));
+        assertEquals(Feeds.Q_1080_HEVC, Feeds.quality("4k", false, true, 3840, 4 * GB, 6 * GB));   // no decoder: ignored
+        assertEquals(Feeds.Q_1080_H264, Feeds.quality("4k", false, false, 3840, 4 * GB, 6 * GB));
+        assertEquals(Feeds.Q_1080_HEVC, Feeds.quality("1080", true, true, 3840, 4 * GB, 6 * GB));
+        assertEquals(Feeds.Q_1080_H264, Feeds.quality("1080", true, false, 3840, 4 * GB, 6 * GB));
+        assertEquals(Feeds.Q_4K, Feeds.quality("auto", true, true, 3840, 4 * GB, 6 * GB));
+        assertEquals(Feeds.Q_1080_HEVC, Feeds.quality("junk", true, true, 1920, 4 * GB, 6 * GB));
+    }
+
+    // ---- how many, how often ----
+
+    @Test public void keepingFewerThanTheBudgetAllowsClampsAndMoreIsClamped() {
+        assertEquals(4, Feeds.clipTarget(100 * GB, 180 * MB, 4));
+        assertEquals(2, Feeds.clipTarget(512 * MB, 180 * MB, 16));     // the budget wins
+        assertEquals(Feeds.MAX_CLIPS, Feeds.clipTarget(100 * GB, 180 * MB, 0));   // Auto
+        assertEquals(15, Feeds.stillKeep(15));
+        assertEquals(Feeds.MAX_STILLS, Feeds.stillKeep(7));
+    }
+
+    @Test public void theRefreshPeriodsAreSixTwelveTwentyFourOrNever() {
+        assertEquals(6L * 3600_000, Feeds.periodMs(6));
+        assertEquals(24L * 3600_000, Feeds.periodMs(24));
+        assertEquals(0, Feeds.periodMs(0));
+        assertEquals(12L * 3600_000, Feeds.periodMs(5));
+    }
+
     // ---- sources ----
 
     @Test public void bingGivesADatedPictureWithPlaceAndCredit() throws Exception {
@@ -117,6 +146,33 @@ public class FeedsTest {
         assertTrue(items.get(0).clip);
         assertEquals("aerial-829E69BA-BB53.mp4", items.get(1).name);
         assertEquals("https://sylvan.apple.com/la.mov", items.get(1).url);
+    }
+
+    @Test public void aerialsKnowTheirCategoryAndFilterByIt() throws Exception {
+        String json = "{\"assets\":["
+                + "{\"shotID\":\"S1\",\"categories\":[\"55B7C95D-8A5F-4C64-8D68-8B1A2A5B9C11\"],\"url-1080-H264\":\"https://a/s1.mov\"},"
+                + "{\"shotID\":\"L1\",\"categories\":[\"a33a55d9-0000\",\"5EF41171-0000\"],\"url-1080-H264\":\"https://a/l1.mov\"},"
+                + "{\"shotID\":\"U1\",\"categories\":[\"8BE8B524-0000\"],\"url-1080-H264\":\"https://a/u1.mov\"},"
+                + "{\"shotID\":\"X1\",\"categories\":[\"FFFFFFFF-0000\"],\"url-1080-H264\":\"https://a/x1.mov\"},"
+                + "{\"shotID\":\"N1\",\"url-1080-H264\":\"https://a/n1.mov\"}]}";
+        List<Feeds.Item> all = Feeds.aerials(json, Feeds.fallbacks(Feeds.Q_1080_H264));
+        assertEquals("space", all.get(0).category);
+        assertEquals("landscapes", all.get(1).category);   // the first known one
+        assertEquals("underwater", all.get(2).category);
+        assertEquals("", all.get(3).category);
+        assertEquals("", all.get(4).category);
+
+        Set<String> everything = new HashSet<>();
+        for (String[] c : Feeds.CATEGORIES) everything.add(c[0]);
+        assertEquals(5, Feeds.inCategories(all, everything).size());
+        Set<String> some = new HashSet<>();
+        some.add("space");
+        some.add("underwater");
+        List<Feeds.Item> kept = Feeds.inCategories(all, some);
+        assertEquals(2, kept.size());   // uncategorised clips need all four on
+        assertEquals("aerial-S1.mp4", kept.get(0).name);
+        assertEquals("aerial-U1.mp4", kept.get(1).name);
+        assertEquals(0, Feeds.inCategories(all, new HashSet<>()).size());
     }
 
     @Test public void theManifestComesOutOfTheTar() throws Exception {

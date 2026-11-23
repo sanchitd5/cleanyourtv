@@ -32,10 +32,11 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.Iterator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.TimeZone;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -48,6 +49,9 @@ final class Fetcher {
     static final String PREFS = "feeds";
     static final String KEY_AERIALS = "aerials", KEY_BING = "bing", KEY_WIKIMEDIA = "wikimedia";
     static final String KEY_STATUS = "status", KEY_LAST_RUN = "last_run";
+    /** Options: "cat_<key>" booleans, quality ("auto", "1080", "4k"), clips/pictures to keep, hours, only pinned. */
+    static final String KEY_CAT = "cat_", KEY_QUALITY = "quality", KEY_KEEP_CLIPS = "keep_clips",
+            KEY_KEEP_STILLS = "keep_stills", KEY_REFRESH_HOURS = "refresh_hours", KEY_ONLY_PINNED = "only_pinned";
 
     private static final String AUTHORITY = "com.sanchitdang.tvhome.theme";
     private static final String FOLDER = "feeds";
@@ -70,10 +74,13 @@ final class Fetcher {
 
     private final Context ctx;
     private final ContentResolver resolver;
+    /** One state for the refresh job and the screens, so a pick made mid-refresh is not overwritten. */
+    private static final Object LOCK = new Object();
+    private static JSONObject shared;
     private final AtomicBoolean stop;
     private final SharedPreferences prefs;
     private final File stateFile;
-    /** name -> {caption, size, added, clip}: what this app has put in the launcher's folder. */
+    /** name -> {caption, size, added, clip, category, pinned, hidden}: see {@link Picks}. */
     private final JSONObject held;
     private boolean changed;
 
@@ -83,7 +90,10 @@ final class Fetcher {
         this.stop = stop;
         this.prefs = this.ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         this.stateFile = new File(this.ctx.getFilesDir(), "held.json");
-        this.held = readState(stateFile);
+        synchronized (LOCK) {
+            if (shared == null) shared = readState(stateFile);
+            this.held = shared;
+        }
     }
 
     static synchronized void run(Context ctx, AtomicBoolean stop) {
@@ -116,9 +126,11 @@ final class Fetcher {
         boolean aerials = prefs.getBoolean(KEY_AERIALS, true);
         boolean bing = prefs.getBoolean(KEY_BING, true);
         boolean wikimedia = prefs.getBoolean(KEY_WIKIMEDIA, true);
-        dropSource("aerial-", aerials);
-        dropSource("bing-", bing);
-        dropSource("wm-", wikimedia);
+        applyOptions();
+        if (prefs.getBoolean(KEY_ONLY_PINNED, false)) {
+            return "Showing only your pinned wallpapers (" + count(false) + " pictures, " + count(true)
+                    + " clips). Turn off \"Show only pinned\" in Choose wallpapers to fetch more.";
+        }
 
         List<String> notes = new ArrayList<>();
         List<Feeds.Item> stills = new ArrayList<>();
@@ -144,6 +156,60 @@ final class Fetcher {
         return s.toString();
     }
 
+    /** What the screens ask to happen at once, and every refresh starts with: sources, categories, only pinned. */
+    private void applyOptions() {
+        dropSource("aerial-", prefs.getBoolean(KEY_AERIALS, true));
+        dropSource("bing-", prefs.getBoolean(KEY_BING, true));
+        dropSource("wm-", prefs.getBoolean(KEY_WIKIMEDIA, true));
+        List<String> gone;
+        synchronized (LOCK) {
+            gone = prefs.getBoolean(KEY_ONLY_PINNED, false) ? Picks.unpinned(held)
+                    : Picks.disabledCategories(held, categories(prefs));
+        }
+        for (String name : gone) remove(name);
+    }
+
+    static Set<String> categories(SharedPreferences prefs) {
+        Set<String> on = new HashSet<>();
+        for (String[] c : Feeds.CATEGORIES) if (prefs.getBoolean(KEY_CAT + c[0], true)) on.add(c[0]);
+        return on;
+    }
+
+    /** From a screen, on a background thread: apply the options that remove files, now, and fix captions.txt. */
+    static void applyNow(Context ctx) {
+        Fetcher f = new Fetcher(ctx, new AtomicBoolean());
+        try {
+            if (f.ctx.getPackageManager().resolveContentProvider(AUTHORITY, 0) == null) return;
+            f.applyOptions();
+        } catch (SecurityException e) {
+            Log.w(TAG, "the launcher refused a delete", e);
+        } finally {
+            f.finish();
+        }
+    }
+
+    /** From the gallery: OK on a tile. Returns the new state; hiding deletes the file from the launcher. */
+    static int cycle(Context ctx, String name) {
+        Fetcher f = new Fetcher(ctx, new AtomicBoolean());
+        int state;
+        synchronized (LOCK) {
+            state = Picks.cycle(f.held, name);
+        }
+        try {
+            if (state == Picks.HIDDEN) f.deleteFile(name);
+        } finally {
+            f.finish();
+        }
+        return state;
+    }
+
+    static List<Picks.Entry> entries(Context ctx) {
+        Fetcher f = new Fetcher(ctx, new AtomicBoolean());
+        synchronized (LOCK) {
+            return Picks.entries(f.held);
+        }
+    }
+
     // ---- stills ----
 
     private List<Feeds.Item> wikimediaDays(List<String> notes) {
@@ -153,7 +219,7 @@ final class Fetcher {
         long now = System.currentTimeMillis();
         for (int d = 0; d < WIKIMEDIA_DAYS && !stop.get(); d++) {
             String day = path.format(new Date(now - d * 86_400_000L));
-            if (held.has("wm-" + day.replace("/", "") + ".jpg")) continue;
+            if (has("wm-" + day.replace("/", "") + ".jpg")) continue;
             try {
                 Feeds.Item item = Feeds.wikimedia(get(WIKIMEDIA + day, 2 * 1024 * 1024), day);
                 if (item != null) out.add(item);
@@ -165,13 +231,21 @@ final class Fetcher {
     }
 
     private void fetchStills(List<Feeds.Item> offered, List<String> notes) throws IOException {
-        // Newest first: the names end in the date.
-        Collections.sort(offered, (a, b) -> b.name.substring(b.name.indexOf('-')).compareTo(a.name.substring(a.name.indexOf('-'))));
-        int todo = 0, at = 0;
-        for (Feeds.Item item : offered) if (!held.has(item.name)) todo++;
+        // Newest first: the names end in the date. Only as many as there is room for beside the pinned ones, so
+        // a short shelf does not fetch what the next eviction would drop, then fetch again.
+        Collections.sort(offered, (a, b) -> Picks.date(b.name).compareTo(Picks.date(a.name)));
+        int keep = Feeds.stillKeep(prefs.getInt(KEY_KEEP_STILLS, Feeds.MAX_STILLS));
+        int room = Math.max(0, keep - pinnedCount(false));
+        List<Feeds.Item> want = new ArrayList<>();
         for (Feeds.Item item : offered) {
+            if (want.size() >= room) break;
+            if (!has(item.name) || stateOf(item.name) == Picks.NORMAL) want.add(item);
+        }
+        int todo = 0, at = 0;
+        for (Feeds.Item item : want) if (!has(item.name)) todo++;
+        for (Feeds.Item item : want) {
             if (stop.get()) throw new InterruptedIOException();
-            if (held.has(item.name)) continue;
+            if (has(item.name)) continue;
             step("Pictures", label(item), ++at, todo);
             File part = new File(ctx.getCacheDir(), "still.part");
             try {
@@ -192,37 +266,39 @@ final class Fetcher {
                 part.delete();
             }
         }
-        evictOldest(false, Feeds.MAX_STILLS);
+        evictOldest(false, keep);
     }
 
     // ---- clips ----
 
     private String fetchClips(List<String> notes) throws Exception {
         long budget = budget();
-        String quality = Feeds.quality(hevc(3840, 2160), hevc(1920, 1080), displayWidth(), ram(), budget);
+        String quality = Feeds.quality(prefs.getString(KEY_QUALITY, Feeds.PREF_AUTO), hevc(3840, 2160),
+                hevc(1920, 1080), displayWidth(), ram(), budget);
         step("Checking Apple's aerial list", "", 0, 0);
         List<Feeds.Item> offered;
         try (InputStream in = open(AERIAL_MANIFEST, 0).getInputStream()) {
             byte[] manifest = Feeds.tarEntry(in, "entries.json", 8 * Feeds.MB);
             if (manifest == null) throw new IOException("no entries.json in the aerial manifest");
-            offered = Feeds.aerials(new String(manifest, StandardCharsets.UTF_8), Feeds.fallbacks(quality));
+            offered = Feeds.inCategories(Feeds.aerials(new String(manifest, StandardCharsets.UTF_8),
+                    Feeds.fallbacks(quality)), categories(prefs));
         } catch (IOException e) {
             notes.add("Aerials: " + e.getMessage());
             return quality;
         }
-        int target = Feeds.clipTarget(budget, Feeds.typicalBytes(quality));
+        int target = Feeds.clipTarget(budget, Feeds.typicalBytes(quality), prefs.getInt(KEY_KEEP_CLIPS, 0));
         evictOldest(true, target);
         if (target == 0) {
             notes.add("Aerials: not enough free storage for a clip.");
             return quality;
         }
         // A full shelf swaps its oldest clip for a new one once a week, so the set keeps changing.
-        if (count(true) >= target && oldest(true) != null
-                && System.currentTimeMillis() - held.optJSONObject(oldest(true)).optLong("added") > Feeds.ROTATE_AFTER_MS) {
-            remove(oldest(true));
+        String oldest = oldest(true);   // never a pinned one
+        if (count(true) >= target && oldest != null && System.currentTimeMillis() - added(oldest) > Feeds.ROTATE_AFTER_MS) {
+            remove(oldest);
         }
         List<Feeds.Item> fresh = new ArrayList<>();
-        for (Feeds.Item item : offered) if (!held.has(item.name)) fresh.add(item);
+        for (Feeds.Item item : offered) if (!has(item.name)) fresh.add(item);
         Collections.shuffle(fresh);
         int fetched = 0;
         int planned = Math.max(0, Math.min(Feeds.CLIPS_PER_RUN, Math.min(target - count(true), fresh.size())));
@@ -269,7 +345,7 @@ final class Fetcher {
         return (dot > 0 ? c.substring(0, dot) : c).isEmpty() ? item.name : (dot > 0 ? c.substring(0, dot) : c);
     }
 
-    private static Uri uri(String name) {
+    static Uri uri(String name) {
         return new Uri.Builder().scheme("content").authority(AUTHORITY).appendPath(FOLDER).appendPath(name).build();
     }
 
@@ -284,13 +360,21 @@ final class Fetcher {
         changed = true;
     }
 
+    /** Delete the launcher's file and forget the item. */
     private void remove(String name) {
+        deleteFile(name);
+        synchronized (LOCK) {
+            held.remove(name);
+        }
+    }
+
+    /** Delete the launcher's file only: a hidden item stays in the state as a blocklist entry. */
+    private void deleteFile(String name) {
         try {
             resolver.delete(uri(name), null, null);
         } catch (RuntimeException e) {
             Log.w(TAG, "could not delete " + name, e);
         }
-        held.remove(name);
         changed = true;
     }
 
@@ -298,9 +382,9 @@ final class Fetcher {
     private void reconcile() {
         for (String name : names()) {
             try (ParcelFileDescriptor pfd = resolver.openFileDescriptor(uri(name), "r")) {
-                if (pfd == null || pfd.getStatSize() <= 0) held.remove(name);
+                if (pfd == null || pfd.getStatSize() <= 0) forget(name);
             } catch (FileNotFoundException e) {
-                held.remove(name);
+                forget(name);
             } catch (IOException ignored) {
                 // closing failed: the file is there
             }
@@ -309,73 +393,104 @@ final class Fetcher {
 
     private void dropSource(String prefix, boolean enabled) {
         if (enabled) return;
-        for (String name : names()) if (name.startsWith(prefix)) remove(name);
+        for (String name : names()) if (name.startsWith(prefix) && stateOf(name) != Picks.PINNED) remove(name);
     }
 
     private void evictOldest(boolean clips, int keep) {
-        while (count(clips) > keep) remove(oldest(clips));
+        List<String> gone;
+        synchronized (LOCK) {
+            gone = Picks.overflow(held, clips, keep);
+        }
+        for (String name : gone) remove(name);
     }
 
     /** Write captions.txt last, deleting it first: the folder's change marks the run done for the launcher. */
     private void finish() {
-        writeState();
-        if (!changed) return;
-        Map<String, String> captions = new HashMap<>();
-        for (String name : names()) captions.put(name, held.optJSONObject(name).optString("caption"));
-        try {
-            resolver.delete(uri(CAPTIONS), null, null);
-            try (OutputStream out = resolver.openOutputStream(uri(CAPTIONS), "w")) {
-                if (out != null) out.write(Feeds.captionsFile(captions).getBytes(StandardCharsets.UTF_8));
+        synchronized (LOCK) {
+            writeState();
+            if (!changed) return;
+            Map<String, String> captions = new HashMap<>();
+            for (String name : Picks.files(held)) captions.put(name, held.optJSONObject(name).optString("caption"));
+            try {
+                resolver.delete(uri(CAPTIONS), null, null);
+                try (OutputStream out = resolver.openOutputStream(uri(CAPTIONS), "w")) {
+                    if (out != null) out.write(Feeds.captionsFile(captions).getBytes(StandardCharsets.UTF_8));
+                }
+            } catch (Exception e) {
+                Log.w(TAG, "could not write captions", e);
             }
-        } catch (Exception e) {
-            Log.w(TAG, "could not write captions", e);
+            changed = false;
         }
     }
 
     // ---- state ----
 
     private void hold(Feeds.Item item, long size) {
-        try {
-            held.put(item.name, new JSONObject().put("caption", item.caption).put("size", size)
-                    .put("added", System.currentTimeMillis()).put("clip", item.clip));
-        } catch (Exception e) {
-            throw new IllegalStateException(e);
+        synchronized (LOCK) {
+            try {
+                held.put(item.name, new JSONObject().put("caption", item.caption).put("size", size)
+                        .put("added", System.currentTimeMillis()).put("clip", item.clip).put("category", item.category));
+            } catch (Exception e) {
+                throw new IllegalStateException(e);
+            }
+            writeState();
         }
-        writeState();
     }
 
+    private void forget(String name) {
+        synchronized (LOCK) {
+            held.remove(name);
+        }
+    }
+
+    /** Known at all: held, pinned or hidden. */
+    private boolean has(String name) {
+        synchronized (LOCK) {
+            return held.has(name);
+        }
+    }
+
+    private int stateOf(String name) {
+        synchronized (LOCK) {
+            return Picks.stateOf(held, name);
+        }
+    }
+
+    private long added(String name) {
+        synchronized (LOCK) {
+            return held.optJSONObject(name).optLong("added");
+        }
+    }
+
+    /** The names whose files are in the launcher's folder. */
     private List<String> names() {
-        List<String> out = new ArrayList<>();
-        for (Iterator<String> it = held.keys(); it.hasNext(); ) out.add(it.next());
-        return out;
+        synchronized (LOCK) {
+            return Picks.files(held);
+        }
     }
 
     private int count(boolean clips) {
-        int n = 0;
-        for (String name : names()) if (held.optJSONObject(name).optBoolean("clip") == clips) n++;
-        return n;
+        synchronized (LOCK) {
+            return Picks.count(held, clips);
+        }
+    }
+
+    private int pinnedCount(boolean clips) {
+        synchronized (LOCK) {
+            return Picks.pinned(held, clips);
+        }
     }
 
     private String oldest(boolean clips) {
-        String oldest = null;
-        long at = Long.MAX_VALUE;
-        for (String name : names()) {
-            JSONObject o = held.optJSONObject(name);
-            if (o.optBoolean("clip") == clips && o.optLong("added") < at) {
-                at = o.optLong("added");
-                oldest = name;
-            }
+        synchronized (LOCK) {
+            return Picks.oldest(held, clips);
         }
-        return oldest;
     }
 
     private long used() {
-        long n = 0;
-        for (String name : names()) {
-            JSONObject o = held.optJSONObject(name);
-            if (o.optBoolean("clip")) n += o.optLong("size");
+        synchronized (LOCK) {
+            return Picks.clipBytes(held);
         }
-        return n;
     }
 
     private static JSONObject readState(File f) {
@@ -410,7 +525,7 @@ final class Fetcher {
         return Feeds.budget(fs.getTotalBytes(), fs.getAvailableBytes(), used());
     }
 
-    private boolean hevc(int w, int h) {
+    static boolean hevc(int w, int h) {
         for (MediaCodecInfo info : new MediaCodecList(MediaCodecList.REGULAR_CODECS).getCodecInfos()) {
             if (info.isEncoder()) continue;
             for (String type : info.getSupportedTypes()) {
