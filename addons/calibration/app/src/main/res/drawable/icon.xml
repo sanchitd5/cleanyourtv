@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The app icon: the banner's colour bars, square. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#FF101010" android:pathData="M0,0h108v108h-108z" />
+    <path android:fillColor="#FFC0C0C0" android:pathData="M14,16h11v50h-11z" />
+    <path android:fillColor="#FFC0C000" android:pathData="M25,16h11v50h-11z" />
+    <path android:fillColor="#FF00C0C0" android:pathData="M36,16h12v50h-12z" />
+    <path android:fillColor="#FF00C000" android:pathData="M48,16h12v50h-12z" />
+    <path android:fillColor="#FFC000C0" android:pathData="M60,16h12v50h-12z" />
+    <path android:fillColor="#FFC00000" android:pathData="M72,16h11v50h-11z" />
+    <path android:fillColor="#FF0000C0" android:pathData="M83,16h11v50h-11z" />
+    <path android:fillColor="#FF404040" android:pathData="M14,74h20v18h-20z" />
+    <path android:fillColor="#FF808080" android:pathData="M34,74h20v18h-20z" />
+    <path android:fillColor="#FFC0C0C0" android:pathData="M54,74h20v18h-20z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M74,74h20v18h-20z" />
+</vector>

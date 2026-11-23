@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The TV banner: colour bars over a grey ramp. Drawn for this add-on, no third-party art. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp" android:height="180dp"
+    android:viewportWidth="320" android:viewportHeight="180">
+    <path android:fillColor="#FF101010" android:pathData="M0,0h320v180h-320z" />
+    <path android:fillColor="#FFC0C0C0" android:pathData="M20,20h40v90h-40z" />
+    <path android:fillColor="#FFC0C000" android:pathData="M60,20h40v90h-40z" />
+    <path android:fillColor="#FF00C0C0" android:pathData="M100,20h40v90h-40z" />
+    <path android:fillColor="#FF00C000" android:pathData="M140,20h40v90h-40z" />
+    <path android:fillColor="#FFC000C0" android:pathData="M180,20h40v90h-40z" />
+    <path android:fillColor="#FFC00000" android:pathData="M220,20h40v90h-40z" />
+    <path android:fillColor="#FF0000C0" android:pathData="M260,20h40v90h-40z" />
+    <path android:fillColor="#FF000000" android:pathData="M20,120h35v40h-35z" />
+    <path android:fillColor="#FF404040" android:pathData="M55,120h35v40h-35z" />
+    <path android:fillColor="#FF808080" android:pathData="M90,120h35v40h-35z" />
+    <path android:fillColor="#FFC0C0C0" android:pathData="M125,120h35v40h-35z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M160,120h35v40h-35z" />
+    <path android:fillColor="#FFFFB45A" android:pathData="M215,125h12v30h-12z M233,135h12v20h-12z M251,127h12v28h-12z M269,138h12v17h-12z" />
+</vector>

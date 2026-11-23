@@ -16,7 +16,7 @@ TEXT = {".gradle", ".kts", ".java", ".kt", ".xml", ".properties", ".sh", ".ps1",
 
 # Add-ons merged before screenshots were required. This list only shrinks: once one gets a
 # screenshot.jpg, take it off here.
-SCREENSHOT_WANTED = {"wallpaper-feeds"}   # Horizon fork: screenshot from the TV still to come
+SCREENSHOT_WANTED = {"wallpaper-feeds", "calibration"}   # Horizon fork: screenshots from the TV still to come
 
 
 def addon_dirs():

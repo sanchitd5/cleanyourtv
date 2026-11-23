@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Calibration</string>
+    <string name="menu_patterns">Picture patterns (%1$d), Left and Right change pattern</string>
+    <string name="menu_signal">Sound: %1$s</string>
+    <string name="pattern_footer">%1$d of %2$d, %3$s levels, %4$d x %5$d px. Left/Right: pattern. Up/Down: limited or full levels. OK: hide this help. Back: exit.</string>
+    <string name="range_limited">limited (16-235)</string>
+    <string name="range_full">full (0-255)</string>
+
+    <string name="volume_warning">START WITH THE VOLUME LOW. Signals peak at -12 dBFS and fade in, but a test tone can still be loud.</string>
+    <string name="press_ok">Press OK to start</string>
+    <string name="press_ok_again">Press OK to play again, Back to leave.</string>
+    <string name="starting_in">Starting in %1$d (Back cancels)</string>
+    <string name="finished">Done</string>
+    <string name="silence">...</string>
+    <string name="hz">%1$d Hz</string>
+    <string name="left">LEFT</string>
+    <string name="right">RIGHT</string>
+    <string name="band_progress">Band %1$d of %2$d</string>
+    <string name="seconds_left">%1$d s left</string>
+
+    <string name="s_pink_title">Pink noise (60 s)</string>
+    <string name="s_pink_now">Pink noise</string>
+    <string name="s_pink_help">Equal energy in every octave, for a microphone or your ear. A speaker with a flat response sounds even, neither boomy nor thin.</string>
+    <string name="s_bands_title">EQ bands: 125 Hz to 8 kHz, 4 s each</string>
+    <string name="s_bands_help">Seven tones, 125, 250, 500 Hz, 1, 2, 4 and 8 kHz, four seconds each with a second of silence: the TV equaliser\'s own bands. Record them and run tools/calibrate_sound.py.</string>
+    <string name="s_sweep_title">Sweep: 20 Hz to 20 kHz, 20 s</string>
+    <string name="s_sweep_now">Listen for rattles, buzzes and dips; the bass drops out below what the speakers can reach.</string>
+    <string name="s_sweep_help">A smooth rise from 20 Hz to 20 kHz. Listen for rattles and buzzes in the cabinet, and for where the bass starts and the treble ends.</string>
+    <string name="s_lr_title">Left and right</string>
+    <string name="s_lr_help">A 1 kHz beep on the left, then on the right, three times. Each should come from its own side; if they swap, the speaker wires or the TV setting are crossed.</string>
+
+    <string name="p_pluge_limited_title">PLUGE, limited range (16 is black)</string>
+    <string name="p_pluge_limited_help">Brightness. Background is 16, video black. Bars read 0 to 25. Lower Brightness until the bars at 0 to 14 vanish into the background, then raise it until 18 and above only just show. Bars below 16 should never be visible; 18 should be a faint step.</string>
+    <string name="p_pluge_full_title">PLUGE, full range (0 is black)</string>
+    <string name="p_pluge_full_help">Brightness for full-range signals. Background is 0. Raise Brightness until bar 1 or 2 just shows, lower it until bar 0 and the background cannot be told apart. If bars up to 8 are invisible, shadows are being crushed; check the HDMI range.</string>
+    <string name="p_white_clip_title">White clipping, 235 to 255</string>
+    <string name="p_white_clip_help">Contrast. Lower Contrast (or the Local Contrast, Adaptive Luma or Dynamic Contrast settings) until you can tell every bar from its neighbours. In limited range 235 is white; bars from 236 up show only when the TV passes super-whites. If several bars merge, the highlights are clipped.</string>
+    <string name="p_ramp_title">Greyscale ramp and 11 steps</string>
+    <string name="p_ramp_help">Top: every grey code, no banding in a good picture. Bottom: 0 to 100 percent in tens. Each step should be a little lighter than the one before and nothing should have a colour tint; a tint means white balance is off. Visible stripes on the ramp mean banding or a processing setting.</string>
+    <string name="p_bars75_title">Colour bars, 75 percent</string>
+    <string name="p_bars75_help">White, yellow, cyan, green, magenta, red, blue, then a grey scale. Colour should be rich but not glowing. Use the colour filter (blue only) if your TV has one, and match the blue bars. Skin tones in a film should not turn orange or green.</string>
+    <string name="p_bars100_title">Colour bars, 100 percent</string>
+    <string name="p_bars100_help">The same bars at full level. Every bar should have a distinct edge and the same brightness across its width. A bar that bleeds or loses detail is clipped or oversaturated, so lower Colour or turn off Vivid modes.</string>
+    <string name="p_sat_rgb_title">Saturation sweep: red, green, blue</string>
+    <string name="p_sat_rgb_help">Each row grows from grey to the pure primary in steps of 20 percent. Look for steps that merge near the end (clipping) or skip (a colour gamut or boost setting). Each step should look evenly stronger than the last.</string>
+    <string name="p_sat_cmy_title">Saturation sweep: cyan, magenta, yellow</string>
+    <string name="p_sat_cmy_help">The same for the secondary colours. Yellow and cyan are bright, magenta darker; a hue shift along the row (yellow going green or orange) points at the colour management or a colour temperature that is too cool or too warm.</string>
+    <string name="p_sharp_title">Sharpness, overscan and pixel mapping</string>
+    <string name="p_sharp_help">Left and middle: 1-pixel lines, right: a checkerboard. Turn Sharpness down until there are no bright halos or ringing beside edges; the lines should be uniform. The border on the edge of the screen must be visible on all four sides, otherwise turn overscan off (Just Scan, Full Pixel or Screen Fit). The circle should be round.</string>
+    <string name="p_gamma_title">Gamma 2.2 checkerboard</string>
+    <string name="p_gamma_help">Step back and squint. Each column shows a fine black and white checkerboard with a solid square calibrated for a gamma of 1.8, 2.0, 2.2, 2.4 and 2.6. The square that disappears into the checkerboard is your TV\'s gamma. Aim for 2.2 in a bright room, 2.4 in the dark.</string>
+    <string name="p_grey5_title">Uniformity, 5 percent grey</string>
+    <string name="p_grey5_help">Dark scenes. Look for clouding, bright corners or a vertical band across the screen. Turn the room lights down and ignore reflections. A little variation is normal; a patch that is clearly lighter is panel or backlight.</string>
+    <string name="p_grey50_title">Uniformity, 50 percent grey</string>
+    <string name="p_grey50_help">The best test for dirty screen effect and colour tint. The field should be one even grey with no tint of green or magenta and no darker edges or centre.</string>
+    <string name="p_grey100_title">Uniformity, 100 percent white</string>
+    <string name="p_grey100_help">Look for yellowing, cool edges, dark corners or banding. If the white looks too bright to look at in a dark room, lower the backlight (not Contrast).</string>
+    <string name="p_red_title">Uniformity, full red</string>
+    <string name="p_red_help">Full-screen red. Look for dead or stuck pixels (black or white dots), darker areas and colour patches.</string>
+    <string name="p_green_title">Uniformity, full green</string>
+    <string name="p_green_help">Full-screen green. Look for dead or stuck pixels, darker areas and colour patches.</string>
+    <string name="p_blue_title">Uniformity, full blue</string>
+    <string name="p_blue_help">Full-screen blue. Look for dead or stuck pixels, darker areas and colour patches.</string>
+    <string name="p_motion_title">Motion: judder, blur and MEMC</string>
+    <string name="p_motion_help">A white square, a still square, moving stripes and text cross the screen at the same speed. With motion smoothing (MEMC) off, edges should be sharp and move in small steps. Turn it up until the text stays readable without the soap-opera look, halos behind the square or tearing of the stripes. Low is usually enough.</string>
+</resources>
