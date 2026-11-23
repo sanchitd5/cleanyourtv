@@ -57,7 +57,7 @@ SCREENSHOT_WANTED = {
     "wifi_status_color",
 }
 
-# Horizon fork keys (sanchitd5/cleanyourtv, not upstreamed): no docs/switches.md rows on purpose.
+# Horizon fork keys (not upstreamed): no docs/switches.md rows on purpose.
 SCREENSHOT_WANTED |= {
     "watermark", "wallpaper_video", "wallpaper_video_rotation_minutes", "wallpaper_caption_seconds",
     "top_shelf", "top_shelf_scrim", "top_bar_layout", "top_bar_date", "screensaver_wallpapers",
