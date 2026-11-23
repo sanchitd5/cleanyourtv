@@ -11,11 +11,11 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- The launcher's own signature permission: lets this app, built with the same key, write into the
          launcher's feeds/ folder and nowhere else in it. -->
-    <uses-permission android:name="com.gathin.tvhome.permission.WRITE_FEEDS" />
+    <uses-permission android:name="com.sanchitdang.tvhome.permission.WRITE_FEEDS" />
 
     <!-- Android 11+: see the launcher's provider. -->
     <queries>
-        <package android:name="com.gathin.tvhome" />
+        <package android:name="com.sanchitdang.tvhome" />
     </queries>
 
     <application

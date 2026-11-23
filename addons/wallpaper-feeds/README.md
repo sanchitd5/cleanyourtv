@@ -53,7 +53,7 @@ downloaded files from the launcher too.
   upload.wikimedia.org/thumb.wikimedia.org and sylvan.apple.com only. HTTPS only; nothing is sent but the
   requests.
 - `RECEIVE_BOOT_COMPLETED`: the twice-daily refresh stays scheduled after a reboot.
-- `com.gathin.tvhome.permission.WRITE_FEEDS`: the launcher's own signature permission, held only by apps
+- `com.sanchitdang.tvhome.permission.WRITE_FEEDS`: the launcher's own signature permission, held only by apps
   signed with the launcher's key. It lets this app write into the launcher's `feeds/` folder and nowhere else.
 
 sylvan.apple.com's certificate comes from Apple's own root, which Android does not carry, so the app trusts

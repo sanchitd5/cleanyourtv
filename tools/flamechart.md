@@ -35,7 +35,7 @@ recordings in every panel. A trace's sidecar scenario takes precedence over its 
 | `--highlight REGEX` | `^(activityResume\|RV OnBindView)$` | Slice names to draw magenta and total. Children of a match count once. |
 | `--window` | `first-frame` | `first-frame`: launcher start to first frame drawn. `start:MS`: a fixed span from the start. `all`: the whole recording (always for `nav`). |
 | `--threads` | `main,RenderThread` | Lanes, by thread name in the launcher's process. Repeated names or aliases of the same thread keep only the first lane, so its highlighted work is counted once. |
-| `--package` | `com.gathin.tvhome` | The launcher's package. A fork built under another one - [SHOWCASE.md](../SHOWCASE.md) lists several - draws nothing without it: the lanes are that package's threads, so the run stops at `no <package> process in the trace`. |
+| `--package` | `com.sanchitdang.tvhome` | The launcher's package. A fork built under another one - [SHOWCASE.md](../SHOWCASE.md) lists several - draws nothing without it: the lanes are that package's threads, so the run stops at `no <package> process in the trace`. |
 | `--out` | | The PNG to write; required. |
 | `--labels` | `Before,After` | The panels' labels, comma-separated and in the order of the traces; a panel past the last one is named `Run 3`, `Run 4`. |
 | `--title` | `Launcher: start to first frame` | The title, top left. |

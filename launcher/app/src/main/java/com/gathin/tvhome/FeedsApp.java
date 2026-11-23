@@ -21,7 +21,7 @@ import java.io.OutputStream;
  * which shows its own confirmation. Nothing is installed without the person pressing Install there too.
  */
 final class FeedsApp {
-    static final String PACKAGE = "com.gathin.wallfeeds";
+    static final String PACKAGE = "com.sanchitdang.wallfeeds";
     static final String APK = "wallfeeds.apk";
     private static final String TAG = "FeedsApp";
     private static final String PREFS = "feeds_app";
@@ -85,7 +85,7 @@ final class FeedsApp {
                         while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
                         session.fsync(out);
                     }
-                    Intent done = new Intent(ACTION).setPackage(app.getPackageName());
+                    Intent done = new Intent(app, Receiver.class).setAction(ACTION);
                     PendingIntent pending = PendingIntent.getBroadcast(app, id, done,
                             PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_MUTABLE);
                     session.commit(pending.getIntentSender());
@@ -121,7 +121,7 @@ final class FeedsApp {
                         ctx.startActivity(confirm);
                         return;
                     } catch (RuntimeException e) {
-                        Log.w(TAG, "no installer screen", e);
+                        Log.w(TAG, "could not open the installer confirmation screen", e);
                     }
                 }
                 installing = false;

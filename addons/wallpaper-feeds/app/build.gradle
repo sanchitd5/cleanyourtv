@@ -7,7 +7,7 @@ android {
     compileSdk 34
 
     defaultConfig {
-        applicationId 'com.gathin.wallfeeds'
+        applicationId 'com.sanchitdang.wallfeeds'
         // The launcher's floor.
         minSdk 26
         targetSdk 34
