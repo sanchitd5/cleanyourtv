@@ -83,6 +83,22 @@ screenshots pulled from the TV. With this repo as context it takes about fifteen
 
 ## What you get
 
+### Horizon, the main theme
+
+<p align="center">
+  <img src="docs/horizon/home-aerial.jpg" width="900" alt="Horizon: an Apple TV aerial of a Scottish loch playing behind Home, the date top left, a glass capsule with Inputs, Settings and the time top right, the six-app dock in a glass band, the clip's name above it">
+</p>
+
+Horizon is the look this fork builds toward tvOS, and the theme every screenshot below uses
+([`themes/horizon`](themes/horizon/)): Apple TV aerials and the Bing and Wikimedia pictures of the day behind
+Home (the [Wallpaper feeds](addons/wallpaper-feeds/) add-on, with NASA's Earth-from-orbit stills and clips
+until it has fetched any), Liquid Glass panels, a tvOS top bar, Inter, focus parallax and sheen, and a
+screensaver that drifts, dims and blanks.
+
+```sh
+tools/theme.sh themes/horizon
+```
+
 A home screen that looks like an Apple TV and gets out of the way:
 
 | Part | What it looks like |
@@ -100,12 +116,12 @@ phoning home, no apps you never asked for.
 
 | | |
 |---|---|
-| ![The top shelf names the focused app over an ambient glow in its colour](docs/focus-2-up-netflix.png) | ![The Inputs popup: HDMI ports with what is connected, AV and Live TV](docs/inputs-menu.jpg) |
-| *Top shelf and ambient glow* | *Inputs: HDMI with connection state, AV, Live TV* |
-| ![The grid with the glass highlight on a tile and its name beneath](docs/focus-1-fancode.png) | ![The Clock screensaver: a thin clock drifting over the glow](docs/clock-screensaver.png) |
-| *The grid, one glass highlight, the tile's name* | *Clock screensaver, drifts so nothing burns in* |
-| ![The aurora theme: a wallpaper and tinted pills, pushed without a rebuild](themes/aurora/screenshot.jpg) | ![Six columns and a six-app dock from a theme's config.json](themes/six-columns/screenshot.jpg) |
-| *Aurora theme, pushed with `tools/theme.sh`* | *Six columns and a six-app dock, same launcher* |
+| ![Focus on YouTube: the tile lifts in the glass dock, its name and when it was last opened in large type above](docs/horizon/focus.jpg) | ![The Inputs menu: a glass panel under the top bar listing HDMI 1 to 3, Composite and Live TV](docs/horizon/inputs.jpg) |
+| *Focus lifts the tile; the top shelf names it* | *Inputs: a glass menu from the top bar* |
+| ![The quick panel: a glass Control Center sheet with the time, Inputs, Wi-Fi, All settings, Picture, Sound, Screen mode and Audio output](docs/horizon/quick-panel.jpg) | ![Launcher settings on glass: apps per row, rows below the dock, dock opacity and clock format](docs/horizon/settings.jpg) |
+| *Quick panel: a glass sheet, the clip keeps playing* | *Launcher settings, every Horizon key on the TV* |
+| ![The screensaver: a large thin clock and the date over a mountain picture of the day, its credit at the bottom](docs/horizon/screensaver.jpg) | ![The aurora theme: a wallpaper and tinted pills, pushed without a rebuild](themes/aurora/screenshot.jpg) |
+| *Screensaver: drifts, dims and blanks so nothing burns in* | *Other themes push the same way: aurora* |
 | ![Moving a tile: held OK, chose Move, the tile is picked up and the others dim](docs/tile-move.jpg) | ![The App library: installed apps, one press adds an app back to Home](docs/app-library.jpg) |
 | *Hold OK on a tile, Move: arrows carry it, Back puts it down* | *App library: one press puts a removed app back on Home* |
 
@@ -185,7 +201,7 @@ tools/disable.sh examples/xiaomi-mi-tv-4a/debloat.txt        # apply a debloat l
 tools/restore.sh examples/xiaomi-mi-tv-4a/debloat.txt        # undo it, stock launcher back
 tools/venv/bin/python -I tools/check.py examples/xiaomi-mi-tv-4a/debloat.txt   # what a firmware update undid
 launcher/build-and-install.sh                                # build the launcher and make it Home (needs the TV_HOST export above)
-tools/theme.sh themes/aurora                                 # push a theme; --reset removes it
+tools/theme.sh themes/horizon                                # push a theme; --reset removes it
 tools/venv/bin/python -I tools/wallpaper_prep.py ~/Pictures/trip mytheme/wallpapers   # your photos, sized and darkened for the TV
 ```
 
@@ -229,7 +245,7 @@ python -m venv tools\venv; tools\venv\Scripts\python.exe -m pip install -r tools
 powershell -ExecutionPolicy Bypass -File launcher\build-and-install.ps1 -TvHost 192.168.1.50
 powershell -ExecutionPolicy Bypass -File tools\disable.ps1 -TvHost 192.168.1.50 examples\xiaomi-mi-tv-4a\debloat.txt
 powershell -ExecutionPolicy Bypass -File tools\restore.ps1 -TvHost 192.168.1.50 examples\xiaomi-mi-tv-4a\debloat.txt
-powershell -ExecutionPolicy Bypass -File tools\theme.ps1 -TvHost 192.168.1.50 themes\aurora
+powershell -ExecutionPolicy Bypass -File tools\theme.ps1 -TvHost 192.168.1.50 themes\horizon
 ```
 
 The last two are the undo and a theme push, the `tools/restore.sh` and `tools/theme.sh` lines the

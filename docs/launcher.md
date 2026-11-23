@@ -76,6 +76,8 @@ The launcher's own page has these rows, top to bottom:
   resetting a theme clears the choices above, but not the Home look rows.
 - **Choose default home** opens Android's home picker, and **TV system settings** the TV's own settings
   page.
+- **Wallpaper feeds** (only with the Wallpaper feeds add-on installed and `wallpaper_feeds` on) opens the
+  add-on's screen: its sources, the running download and Refresh now.
 
 **Change the default home:** Launcher settings and the optional Default-home tile
 (`show_home_settings_shortcut`) open Android's home picker. Choose the original launcher to stop using
