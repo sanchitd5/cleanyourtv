@@ -184,5 +184,12 @@
             style="@style/SettingsRow"
             android:layout_marginTop="18dp"
             android:text="@string/tv_settings" />
+
+        <!-- wallpaper_feeds: opens the Wallpaper feeds add-on (sources, progress, refresh); only when installed. -->
+        <TextView
+            android:id="@+id/wallpaperFeedsChoice"
+            style="@style/SettingsRow"
+            android:visibility="gone"
+            android:text="@string/wallpaper_feeds_settings" />
     </LinearLayout>
 </ScrollView>

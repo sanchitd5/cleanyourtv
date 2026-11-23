@@ -207,4 +207,5 @@
     <string name="feeds_app_later">Not now</string>
     <string name="feeds_app_install">Install</string>
     <string name="feeds_app_failed">Wallpaper feeds did not install: %1$s</string>
+    <string name="wallpaper_feeds_settings">Wallpaper feeds</string>
 </resources>

@@ -169,6 +169,13 @@ public final class LauncherSettingsActivity extends Activity {
                 open(new Intent(this, HomeSettingsActivity.class)));
         findViewById(R.id.tvSettingsChoice).setOnClickListener(v ->
                 open(SystemSettings.intent(this, Settings.ACTION_SETTINGS)));
+        // wallpaper_feeds: the add-on's own screen lives here rather than as a tile on Home.
+        Intent feeds = getPackageManager().getLeanbackLaunchIntentForPackage(FeedsApp.PACKAGE);
+        if (feeds != null) {
+            View feedsChoice = findViewById(R.id.wallpaperFeedsChoice);
+            feedsChoice.setVisibility(View.VISIBLE);
+            feedsChoice.setOnClickListener(v -> open(feeds));
+        }
         styleSheet(config);
         refresh();
         if (config.launcherSettingsButton) reorderChoice.requestFocus();

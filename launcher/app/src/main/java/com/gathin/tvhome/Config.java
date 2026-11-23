@@ -1072,6 +1072,8 @@ final class Config {
         // wallpaper_feeds: the wallpaper-feeds addon's downloads stand in for the theme's collection once there are
         // any; until then (or with the addon gone) the theme's own pictures stay.
         File feeds = feedsDir(dir, json);
+        // Its screen opens from Launcher settings, so the add-on takes no tile on Home.
+        if (feeds != null && !hidden.contains(FeedsApp.PACKAGE)) hidden.add(FeedsApp.PACKAGE);
         List<File> feedImages = feeds != null && wallpaperEnabled ? WallpaperRotation.images(feeds) : Collections.emptyList();
         if (!feedImages.isEmpty()) {
             wallpapers.clear();
