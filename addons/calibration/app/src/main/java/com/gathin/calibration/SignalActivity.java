@@ -61,6 +61,15 @@ public class SignalActivity extends Activity {
         if (id != null) countdown(COUNTDOWN);
     }
 
+    /** A second `am start --es signal <id>` (tools/calibrate_sound.py) restarts with that signal. */
+    @Override
+    protected void onNewIntent(android.content.Intent intent) {
+        super.onNewIntent(intent);
+        if (intent.getStringExtra("signal") == null) return;
+        setIntent(intent);
+        recreate();   // onStop stops the running signal
+    }
+
     private TextView text(int sp, int color) {
         TextView t = new TextView(this);
         t.setTextSize(sp);

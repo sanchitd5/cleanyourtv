@@ -26,6 +26,7 @@
         <!-- am start -n com.sanchitdang.calibration/com.gathin.calibration.PatternActivity with the extra pattern=bars75 (a string) -->
         <activity
             android:name=".PatternActivity"
+            android:launchMode="singleTop"
             android:exported="true"
             android:configChanges="orientation|screenSize|keyboardHidden|uiMode"
             android:theme="@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen" />
@@ -33,6 +34,7 @@
         <!-- am start -n com.sanchitdang.calibration/com.gathin.calibration.SignalActivity with the extra signal=bands (a string) -->
         <activity
             android:name=".SignalActivity"
+            android:launchMode="singleTop"
             android:exported="true"
             android:theme="@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen" />
     </application>

@@ -46,6 +46,18 @@ public class PatternActivity extends Activity implements SurfaceHolder.Callback,
     }
 
 
+    /** A second `am start --es pattern <id>` (calibrate tools, a script) switches the open screen. */
+    @Override
+    protected void onNewIntent(android.content.Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        String id = intent.getStringExtra("pattern");
+        if (id == null) return;
+        index = Math.max(0, Patterns.indexOf(id));
+        startMs = System.currentTimeMillis();
+        if (ready) redraw();
+    }
+
     @SuppressWarnings("deprecation")
     private void hideSystemUi() {
         surface.setSystemUiVisibility(View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
